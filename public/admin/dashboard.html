@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Produtos - Admin</title>
+  <link rel="stylesheet" href="/css/output.css" />
+</head>
+<body class="bg-marca-claro min-h-screen">
+  <div id="nav"></div>
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+      <h2 class="text-2xl font-bold">Produtos & Estoque</h2>
+      <button class="btn-primary" onclick="abrirModal()">+ Novo produto</button>
+    </div>
+
+    <div class="overflow-x-auto card">
+      <table class="w-full text-sm">
+        <thead class="bg-marca-preto text-marca-branco">
+          <tr>
+            <th class="p-2 text-left">Foto</th>
+            <th class="p-2 text-left">Nome</th>
+            <th class="p-2 text-right">Preco</th>
+            <th class="p-2 text-right">Estoque</th>
+            <th class="p-2 text-center">Ativo</th>
+            <th class="p-2"></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Modal -->
+  <div id="modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center px-4 z-50">
+    <form id="form" class="card p-4 w-full max-w-md space-y-3">
+      <h3 id="titulo-modal" class="font-bold text-lg">Novo produto</h3>
+      <input type="hidden" name="id" />
+      <input class="input" name="nome" placeholder="Nome" required />
+      <textarea class="input" name="descricao" placeholder="Descricao" rows="2"></textarea>
+      <div class="grid grid-cols-2 gap-2">
+        <input class="input" name="preco" type="number" step="0.01" placeholder="Preco" required />
+        <input class="input" name="estoque" type="number" placeholder="Estoque" required />
+      </div>
+      <input class="input" name="imagem" type="file" accept="image/*" />
+      <input type="hidden" name="imagem_url" />
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="ativo" checked /> Ativo
+      </label>
+      <div class="flex gap-2 justify-end">
+        <button type="button" class="btn-outline" onclick="fecharModal()">Cancelar</button>
+        <button class="btn-primary" type="submit">Salvar</button>
+      </div>
+    </form>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!API.token()) location.href = "/admin/login.html";
+
+    fetch("/admin/_nav.html").then(r => r.text()).then(h => document.getElementById("nav").innerHTML = h);
+
+    const fmtBRL = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+    async function carregar() {
+      const lista = await API.get("/api/produtos?ativos=0");
+      document.getElementById("tbody").innerHTML = lista.map(p => `
+        <tr class="border-t">
+          <td class="p-2"><div class="w-12 h-12 bg-gray-100 rounded overflow-hidden">${p.imagem_url ? `<img src="${p.imagem_url}" class="w-full h-full object-cover">` : ""}</div></td>
+          <td class="p-2">${p.nome}</td>
+          <td class="p-2 text-right">${fmtBRL(p.preco)}</td>
+          <td class="p-2 text-right">${p.estoque}</td>
+          <td class="p-2 text-center">${p.ativo ? "✓" : "✗"}</td>
+          <td class="p-2 text-right whitespace-nowrap">
+            <button class="text-blue-600 underline" onclick='editar(${JSON.stringify(p)})'>editar</button>
+            <button class="text-red-600 underline ml-2" onclick="excluir('${p.id}')">remover</button>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    function abrirModal() {
+      document.getElementById("form").reset();
+      document.querySelector('[name=id]').value = "";
+      document.getElementById("titulo-modal").textContent = "Novo produto";
+      document.getElementById("modal").classList.remove("hidden");
+    }
+    function fecharModal() { document.getElementById("modal").classList.add("hidden"); }
+    function editar(p) {
+      document.getElementById("titulo-modal").textContent = "Editar produto";
+      document.querySelector('[name=id]').value = p.id;
+      document.querySelector('[name=nome]').value = p.nome;
+      document.querySelector('[name=descricao]').value = p.descricao || "";
+      document.querySelector('[name=preco]').value = p.preco;
+      document.querySelector('[name=estoque]').value = p.estoque;
+      document.querySelector('[name=imagem_url]').value = p.imagem_url || "";
+      document.querySelector('[name=ativo]').checked = !!p.ativo;
+      document.getElementById("modal").classList.remove("hidden");
+    }
+    async function excluir(id) {
+      if (!confirm("Remover produto?")) return;
+      await API.del("/api/produtos?id=" + id);
+      carregar();
+    }
+
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+
+      // Upload da imagem se selecionada
+      let imagem_url = f.get("imagem_url") || null;
+      const file = f.get("imagem");
+      if (file && file.size > 0) {
+        const b64 = await new Promise(res => {
+          const r = new FileReader(); r.onload = () => res(r.result.split(",")[1]); r.readAsDataURL(file);
+        });
+        const up = await API.post("/api/upload", {
+          filename: file.name, content_type: file.type, content_base64: b64,
+        });
+        imagem_url = up.url;
+      }
+
+      const payload = {
+        nome: f.get("nome"),
+        descricao: f.get("descricao"),
+        preco: Number(f.get("preco")),
+        estoque: Number(f.get("estoque")),
+        ativo: f.get("ativo") === "on",
+        imagem_url,
+      };
+      const id = f.get("id");
+      if (id) { payload.id = id; await API.put("/api/produtos", payload); }
+      else { await API.post("/api/produtos", payload); }
+      fecharModal(); carregar();
+    });
+
+    carregar();
+  </script>
+</body>
+</html>
