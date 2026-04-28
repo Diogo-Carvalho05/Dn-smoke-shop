@@ -16,6 +16,7 @@
       .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-marca-claro min-h-screen">
   <div id="nav"></div>
@@ -24,7 +25,6 @@
       <h2 class="text-2xl font-bold">Produtos & Estoque</h2>
       <button class="btn-primary" onclick="abrirModal()">+ Novo produto</button>
     </div>
-
     <div class="overflow-x-auto card">
       <table class="w-full text-sm">
         <thead class="bg-marca-preto text-marca-branco">
@@ -42,7 +42,6 @@
     </div>
   </main>
 
-  <!-- Modal -->
   <div id="modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center px-4 z-50">
     <form id="form" class="card p-4 w-full max-w-md space-y-3">
       <h3 id="titulo-modal" class="font-bold text-lg">Novo produto</h3>
@@ -65,23 +64,24 @@
     </form>
   </div>
 
-  <script src="/js/api.js"></script>
+  <script src="/js/config.js"></script>
+  <script src="/js/auth.js"></script>
   <script>
-    if (!API.token()) location.href = "/admin/login.html";
-
+    Auth.requireLogin().then(u => { if (u) init(); });
     fetch("/admin/_nav.html").then(r => r.text()).then(h => document.getElementById("nav").innerHTML = h);
 
-    const fmtBRL = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    async function init() { carregar(); }
 
     async function carregar() {
-      const lista = await API.get("/api/produtos?ativos=0");
-      document.getElementById("tbody").innerHTML = lista.map(p => `
+      const { data, error } = await sb.from("produtos").select("*").order("nome");
+      if (error) { alert(error.message); return; }
+      document.getElementById("tbody").innerHTML = data.map(p => `
         <tr class="border-t">
           <td class="p-2"><div class="w-12 h-12 bg-gray-100 rounded overflow-hidden">${p.imagem_url ? `<img src="${p.imagem_url}" class="w-full h-full object-cover">` : ""}</div></td>
           <td class="p-2">${p.nome}</td>
           <td class="p-2 text-right">${fmtBRL(p.preco)}</td>
           <td class="p-2 text-right">${p.estoque}</td>
-          <td class="p-2 text-center">${p.ativo ? "✓" : "✗"}</td>
+          <td class="p-2 text-center">${p.ativo ? "&#10003;" : "&#10007;"}</td>
           <td class="p-2 text-right whitespace-nowrap">
             <button class="text-blue-600 underline" onclick='editar(${JSON.stringify(p)})'>editar</button>
             <button class="text-red-600 underline ml-2" onclick="excluir('${p.id}')">remover</button>
@@ -109,8 +109,9 @@
       document.getElementById("modal").classList.remove("hidden");
     }
     async function excluir(id) {
-      if (!confirm("Remover produto?")) return;
-      await API.del("/api/produtos?id=" + id);
+      if (!confirm("Inativar produto?")) return;
+      const { error } = await sb.from("produtos").update({ ativo: false }).eq("id", id);
+      if (error) { alert(error.message); return; }
       carregar();
     }
 
@@ -118,34 +119,32 @@
       e.preventDefault();
       const f = new FormData(e.target);
 
-      // Upload da imagem se selecionada
       let imagem_url = f.get("imagem_url") || null;
       const file = f.get("imagem");
       if (file && file.size > 0) {
-        const b64 = await new Promise(res => {
-          const r = new FileReader(); r.onload = () => res(r.result.split(",")[1]); r.readAsDataURL(file);
-        });
-        const up = await API.post("/api/upload", {
-          filename: file.name, content_type: file.type, content_base64: b64,
-        });
-        imagem_url = up.url;
+        const ext = file.name.split(".").pop();
+        const path = `${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await sb.storage.from("produtos").upload(path, file, { contentType: file.type });
+        if (upErr) { alert("Upload: " + upErr.message); return; }
+        imagem_url = sb.storage.from("produtos").getPublicUrl(path).data.publicUrl;
       }
 
       const payload = {
         nome: f.get("nome"),
-        descricao: f.get("descricao"),
+        descricao: f.get("descricao") || null,
         preco: Number(f.get("preco")),
         estoque: Number(f.get("estoque")),
         ativo: f.get("ativo") === "on",
         imagem_url,
       };
       const id = f.get("id");
-      if (id) { payload.id = id; await API.put("/api/produtos", payload); }
-      else { await API.post("/api/produtos", payload); }
-      fecharModal(); carregar();
+      const { error } = id
+        ? await sb.from("produtos").update(payload).eq("id", id)
+        : await sb.from("produtos").insert(payload);
+      if (error) { alert(error.message); return; }
+      fecharModal();
+      carregar();
     });
-
-    carregar();
   </script>
 </body>
 </html>

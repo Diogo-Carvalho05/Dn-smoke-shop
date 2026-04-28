@@ -16,6 +16,7 @@
       .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-marca-claro text-marca-preto min-h-screen">
   <header class="bg-marca-preto text-marca-branco">
@@ -33,12 +34,13 @@
     <p id="vazio" class="hidden text-center text-gray-500 py-12">Nenhum produto disponivel.</p>
   </main>
 
-  <script src="/js/api.js"></script>
+  <script src="/js/config.js"></script>
   <script src="/js/carrinho.js"></script>
   <script>
     async function carregar() {
+      const { data: produtos, error } = await sb.from("produtos").select("*").eq("ativo", true).order("nome");
+      if (error) { alert("Erro: " + error.message); return; }
       const lista = document.getElementById("lista");
-      const produtos = await API.get("/api/produtos?ativos=1");
       if (!produtos.length) { document.getElementById("vazio").classList.remove("hidden"); return; }
       lista.innerHTML = produtos.map(p => `
         <div class="card p-3 flex flex-col">
@@ -47,7 +49,7 @@
           </div>
           <h3 class="font-semibold text-sm">${p.nome}</h3>
           <p class="text-xs text-gray-500 flex-1">${p.descricao || ""}</p>
-          <p class="font-bold mt-2">${fmtBRL(Number(p.preco))}</p>
+          <p class="font-bold mt-2">${fmtBRL(p.preco)}</p>
           <p class="text-xs text-gray-500 mb-2">Estoque: ${p.estoque}</p>
           <button class="btn-primary text-sm" onclick='adicionar(${JSON.stringify(p)})' ${p.estoque <= 0 ? "disabled" : ""}>
             ${p.estoque <= 0 ? "Sem estoque" : "Adicionar"}
@@ -55,15 +57,10 @@
         </div>
       `).join("");
     }
-    function adicionar(p) {
-      Carrinho.add(p, 1);
-      atualizarBadge();
-    }
-    function atualizarBadge() {
-      document.getElementById("badge-carrinho").textContent = Carrinho.qtdTotal();
-    }
+    function adicionar(p) { Carrinho.add(p, 1); atualizarBadge(); }
+    function atualizarBadge() { document.getElementById("badge-carrinho").textContent = Carrinho.qtdTotal(); }
     atualizarBadge();
-    carregar().catch(e => alert("Erro ao carregar produtos: " + e.message));
+    carregar();
   </script>
 </body>
 </html>

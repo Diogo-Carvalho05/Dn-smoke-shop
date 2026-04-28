@@ -2,123 +2,126 @@
 
 Sistema de gestao de vendas e produtos para tabacaria de cigarro eletronico.
 
-- **Frontend:** HTML5 + TailwindCSS (via CDN) + JS vanilla (mobile-first, responsivo)
-- **Backend:** Vercel Serverless Functions (Python)
-- **Banco de dados:** Supabase (PostgreSQL + Storage para imagens)
-- **Hospedagem:** Vercel (free tier)
-- **Cores:** preto / branco
+- **Frontend:** HTML5 + Tailwind (CDN) + JS vanilla
+- **Backend:** **nenhum** — front conversa direto com Supabase
+- **Auth:** Supabase Authentication
+- **Banco/Storage:** Supabase
+- **Hospedagem:** Vercel (so estatico, sem serverless function)
 
-## Funcionalidades
-
-### Cliente (sem login)
-- Lista de produtos com foto, preco e estoque
-- Carrinho persistente no navegador
-- Checkout com endereco (busca por CEP via ViaCEP, numero obrigatorio)
-- Forma de pagamento: cartao, PIX ou dinheiro (com troco)
-- Pedido enviado pro WhatsApp da loja **e** salvo no banco
-
-### Admin (com login)
-- CRUD de produtos (com upload de foto)
-- Gerenciamento de pedidos online (confirmar / marcar entregue / cancelar)
-- Estoque baixa automaticamente quando o admin marca o pedido como entregue
-- PDV (venda presencial) — baixa estoque na hora
-- Relatorios filtrados por periodo, separando online / PDV / geral
-
----
-
-## Estrutura de pastas
+## Estrutura
 
 ```
 Dn-smoke-shop/
-├── api/                          # Vercel Serverless Functions (Python)
-│   ├── _lib/
-│   │   ├── __init__.py
-│   │   ├── supabase_client.py
-│   │   └── auth_guard.py
-│   ├── auth.py
-│   ├── produtos.py
-│   ├── pedidos.py
-│   ├── vendas_pdv.py
-│   ├── relatorios.py
-│   ├── upload.py
-│   └── config_publico.py
-├── public/                       # frontend estatico
-│   ├── index.html                # loja
-│   ├── carrinho.html
-│   ├── checkout.html
-│   ├── admin/
-│   │   ├── login.html
-│   │   ├── dashboard.html
-│   │   ├── pedidos.html
-│   │   ├── pdv.html
-│   │   ├── relatorios.html
-│   │   └── _nav.html
-│   └── js/
-│       ├── api.js
-│       └── carrinho.js
+├── index.html              # loja
+├── carrinho.html
+├── checkout.html
+├── admin/
+│   ├── login.html
+│   ├── dashboard.html      # produtos + estoque
+│   ├── pedidos.html
+│   ├── pdv.html
+│   ├── relatorios.html
+│   └── _nav.html
+├── js/
+│   ├── config.js           # URL e anon key do Supabase + dados da loja
+│   ├── auth.js             # login/logout via Supabase Auth
+│   └── carrinho.js         # carrinho em localStorage
 ├── supabase/
-│   ├── schema.sql                # tabelas + indices + RLS
-│   └── seed_admin.sql            # cria conta admin
-├── requirements.txt              # supabase, PyJWT, bcrypt
+│   └── schema.sql          # tabelas + RLS + funcoes (RPCs)
 ├── vercel.json
 └── README.md
 ```
 
 ---
 
-## Passo a passo de instalacao
+## Passo a passo (do zero)
 
-### 1. Pre-requisitos
-- Conta no [GitHub](https://github.com/), [Supabase](https://supabase.com/) e [Vercel](https://vercel.com/)
+### 1. Supabase
 
-### 2. Clonar
-```bash
-git clone https://github.com/SEU-USUARIO/Dn-smoke-shop.git
-cd Dn-smoke-shop
+1. Crie projeto em https://supabase.com/dashboard
+2. **SQL Editor -> New query** -> cola tudo de `supabase/schema.sql` -> **Run**.
+   Isso cria tabelas, RLS policies, bucket de imagens e funcoes de baixa de estoque.
+3. **Authentication -> Users -> Add user -> Create new user**:
+   - Email: o seu email de admin
+   - Password: a senha que voce vai usar pra logar
+   - Marque **Auto Confirm User** (importante)
+   - Clica em **Create user**
+4. **Project Settings -> API** -> copia:
+   - `Project URL`
+   - `anon` `public` key (a **anon**, NAO a service_role)
+
+### 2. Configurar o front
+
+Abre `js/config.js` e troca os valores:
+
+```js
+const SUPABASE_URL = "https://SEU_PROJETO.supabase.co";
+const SUPABASE_ANON_KEY = "eyJ...";   // a anon key, e PUBLICA, pode commitar
+const LOJA = {
+  nome: "Dn Smoke Shop",
+  whatsapp: "5518997259973",  // seu numero, formato internacional, so digitos
+};
 ```
 
-### 3. Configurar Supabase
-1. Crie projeto em https://supabase.com/dashboard
-2. **Project Settings -> API**: anote `Project URL` e a key `service_role`
-3. **SQL Editor** -> cole `supabase/schema.sql` -> **Run**
-4. **Storage -> New bucket** -> nome `produtos` -> marque **Public bucket** -> Save
-5. **SQL Editor** -> abra `supabase/seed_admin.sql`, troque a senha pela sua (texto simples) e o email se quiser -> Run
+A `anon key` e **publica por design**. A seguranca vem do RLS configurado no `schema.sql`: anon so faz o que voce permite (ler produtos ativos, criar pedidos). O resto exige login.
 
-### 4. Deploy na Vercel
-1. https://vercel.com/new -> importe o repo do GitHub
-2. Em **Environment Variables** cadastre as 5:
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `JWT_SECRET` (gere uma string aleatoria longa, ex: `python -c "import secrets;print(secrets.token_hex(32))"`)
-   - `LOJA_WHATSAPP` (ex: `5511999999999`)
-   - `LOJA_NOME` (ex: `Dn Smoke Shop`)
-3. **Deploy**
+### 3. GitHub
 
-A partir daqui, todo `git push` na `main` faz redeploy automatico.
+```bash
+git add .
+git commit -m "Setup Supabase Auth"
+git push
+```
+
+### 4. Vercel
+
+1. https://vercel.com/new -> importa o repo do GitHub
+2. **Framework Preset: Other** (NAO escolha Python/Next/etc)
+3. Deixa **Build Command, Output Directory, Install Command** vazios (override OFF)
+4. **NAO precisa cadastrar nenhuma Environment Variable**
+5. **Deploy**
+
+A partir daqui, todo `git push` faz redeploy automatico.
 
 ---
 
 ## Acesso
 
 - **Loja:** `https://seu-projeto.vercel.app/`
-- **Admin:** `https://seu-projeto.vercel.app/admin/login.html`
+- **Admin:** `https://seu-projeto.vercel.app/admin` (redireciona pra login)
 
-## Como funciona
+## Fluxo
 
-### Cliente
+### Cliente (sem login)
 1. Loja -> carrinho -> checkout (CEP via ViaCEP, numero obrigatorio).
 2. Confirma -> pedido salvo no Supabase **e** WhatsApp da loja abre com mensagem pronta.
 
-### Admin
-1. Login em `/admin/login.html` (JWT 12h salvo no `localStorage`).
-2. **Produtos:** cria/edita/remove, upload de fotos.
-3. **Pedidos:** `pendente -> confirmado -> entregue` (estoque baixa ao marcar entregue).
-4. **PDV:** venda no balcao (estoque baixa imediato).
-5. **Relatorios:** filtra por periodo, ve online + PDV + total geral.
+### Admin (login Supabase Auth)
+1. Login em `/admin/login.html` (sessao persiste no navegador).
+2. **Produtos:** cria/edita/inativa, upload de fotos pro Storage.
+3. **Pedidos:** `pendente -> confirmado -> entregue`. Ao marcar entregue, o RPC `baixar_estoque_pedido` baixa o estoque.
+4. **PDV:** venda no balcao, RPC `baixar_estoque_pdv` baixa estoque na hora.
+5. **Relatorios:** filtra por periodo, separa online / PDV / total.
 
-## Seguranca
+## Seguranca (RLS)
 
-- A `SUPABASE_SERVICE_ROLE_KEY` so existe nas Environment Variables da Vercel — nunca chega no navegador.
-- RLS ativado em todas as tabelas, sem policies para `anon`.
-- Login admin: o sistema aceita senha em **texto simples** (mais simples) ou **bcrypt hash** (`$2...`). Pra usar bcrypt, gere com `python -c "import bcrypt; print(bcrypt.hashpw(b'SUA_SENHA', bcrypt.gensalt()).decode())"` e cole no `senha_hash` do admin.
-- Rotas admin verificam token JWT.
+Todas as tabelas tem Row Level Security ativado:
+
+| Tabela | anon (visitante) | authenticated (admin) |
+|---|---|---|
+| `produtos` | SELECT (so ativos) | SELECT/INSERT/UPDATE/DELETE |
+| `pedidos` | INSERT | SELECT/UPDATE |
+| `vendas_pdv` | nada | tudo |
+| Storage `produtos` | leitura publica | upload/delete |
+
+Mesmo se a anon key vazasse (e ela e publica mesmo), ninguem consegue:
+- Ver produtos inativos
+- Listar/editar pedidos
+- Acessar PDV
+- Apagar imagens
+
+Pra criar mais admins, basta criar mais usuarios no **Authentication -> Users**.
+
+## Adicionando outro admin
+
+Authentication -> Users -> Add user. Pronto. Qualquer usuario autenticado pelo Supabase tem acesso de admin.
