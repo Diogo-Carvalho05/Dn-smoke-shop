@@ -26,3 +26,6 @@ public/css/output.css
 *.swp
 .DS_Store
 Thumbs.db
+
+# Claude Code worktree metadata
+.claude/

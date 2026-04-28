@@ -1,6 +1,7 @@
 from http.server import BaseHTTPRequestHandler
-import json
+import json, os, sys
 from urllib.parse import urlparse, parse_qs
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _lib.supabase_client import get_client
 from _lib.auth_guard import verificar_token
 
