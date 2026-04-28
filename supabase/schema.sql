@@ -63,12 +63,13 @@ create policy produtos_insert_auth on produtos for insert to authenticated with 
 create policy produtos_update_auth on produtos for update to authenticated using (true);
 create policy produtos_delete_auth on produtos for delete to authenticated using (true);
 
--- PEDIDOS: anon insere (cliente cria); authenticated le e atualiza
+-- PEDIDOS: qualquer um (anon ou logado) cria pedido; authenticated le e atualiza
 drop policy if exists pedidos_insert_anon on pedidos;
+drop policy if exists pedidos_insert_public on pedidos;
 drop policy if exists pedidos_select_auth on pedidos;
 drop policy if exists pedidos_update_auth on pedidos;
 
-create policy pedidos_insert_anon on pedidos for insert to anon with check (true);
+create policy pedidos_insert_public on pedidos for insert to public with check (true);
 create policy pedidos_select_auth on pedidos for select to authenticated using (true);
 create policy pedidos_update_auth on pedidos for update to authenticated using (true);
 
