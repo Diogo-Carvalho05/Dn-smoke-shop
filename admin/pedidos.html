@@ -12,10 +12,10 @@
     @layer components {
       .btn-primary { @apply bg-marca-preto text-marca-branco px-4 py-2 rounded-lg font-medium hover:bg-marca-cinza transition disabled:opacity-50; }
       .btn-outline { @apply border border-marca-preto text-marca-preto px-4 py-2 rounded-lg font-medium hover:bg-marca-preto hover:text-marca-branco transition; }
-      .input { @apply w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-marca-preto; }
       .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-marca-claro min-h-screen">
   <div id="nav"></div>
@@ -31,17 +31,20 @@
     <div id="lista" class="space-y-3"></div>
   </main>
 
-  <script src="/js/api.js"></script>
+  <script src="/js/config.js"></script>
+  <script src="/js/auth.js"></script>
   <script>
-    if (!API.token()) location.href = "/admin/login.html";
+    Auth.requireLogin().then(u => { if (u) filtrar(""); });
     fetch("/admin/_nav.html").then(r => r.text()).then(h => document.getElementById("nav").innerHTML = h);
-    const fmtBRL = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
     let filtroAtual = "";
     async function filtrar(s) {
       filtroAtual = s;
-      const lista = await API.get("/api/pedidos" + (s ? "?status=" + s : ""));
-      document.getElementById("lista").innerHTML = lista.map(p => `
+      let q = sb.from("pedidos").select("*").order("criado_em", { ascending: false });
+      if (s) q = q.eq("status", s);
+      const { data, error } = await q;
+      if (error) { alert(error.message); return; }
+      document.getElementById("lista").innerHTML = data.map(p => `
         <div class="card p-4">
           <div class="flex justify-between flex-wrap gap-2">
             <div>
@@ -68,15 +71,26 @@
       `).join("") || '<p class="text-gray-500 text-center py-8">Nenhum pedido.</p>';
     }
     function badge(s) {
-      return { pendente: "bg-yellow-200 text-yellow-900", confirmado: "bg-blue-200 text-blue-900",
-               entregue: "bg-green-200 text-green-900", cancelado: "bg-red-200 text-red-900" }[s] || "bg-gray-200";
+      return ({
+        pendente: "bg-yellow-200 text-yellow-900",
+        confirmado: "bg-blue-200 text-blue-900",
+        entregue: "bg-green-200 text-green-900",
+        cancelado: "bg-red-200 text-red-900",
+      })[s] || "bg-gray-200";
     }
     async function mudar(id, status) {
       if (!confirm("Confirmar mudanca para " + status + "?")) return;
-      await API.put("/api/pedidos", { id, status });
+      const update = { status };
+      if (status === "confirmado") update.confirmado_em = new Date().toISOString();
+      if (status === "entregue") update.entregue_em = new Date().toISOString();
+      const { error } = await sb.from("pedidos").update(update).eq("id", id);
+      if (error) { alert(error.message); return; }
+      if (status === "entregue") {
+        const { error: rpcErr } = await sb.rpc("baixar_estoque_pedido", { p_pedido_id: id });
+        if (rpcErr) alert("Estoque: " + rpcErr.message);
+      }
       filtrar(filtroAtual);
     }
-    filtrar("");
   </script>
 </body>
 </html>

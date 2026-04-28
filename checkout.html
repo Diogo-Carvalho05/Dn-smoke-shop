@@ -16,6 +16,7 @@
       .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-marca-claro text-marca-preto min-h-screen">
   <header class="bg-marca-preto text-marca-branco">
@@ -26,7 +27,6 @@
 
   <main class="max-w-2xl mx-auto px-4 py-6">
     <h2 class="text-2xl font-semibold mb-4">Finalizar pedido</h2>
-
     <form id="form" class="space-y-4">
       <div class="card p-4 space-y-3">
         <h3 class="font-semibold">Seus dados</h3>
@@ -72,11 +72,11 @@
     </form>
   </main>
 
-  <script src="/js/api.js"></script>
+  <script src="/js/config.js"></script>
   <script src="/js/carrinho.js"></script>
   <script>
-    document.getElementById("total").textContent = fmtBRL(Carrinho.total());
     if (!Carrinho.itens().length) location.href = "/";
+    document.getElementById("total").textContent = fmtBRL(Carrinho.total());
 
     document.getElementById("pg").addEventListener("change", e => {
       document.getElementById("box-troco").classList.toggle("hidden", e.target.value !== "dinheiro");
@@ -95,7 +95,9 @@
     document.getElementById("form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
-      const payload = {
+      const itens = Carrinho.itens();
+      const total = Carrinho.total();
+      const pedido = {
         cliente_nome: f.get("nome"),
         cliente_telefone: f.get("telefone"),
         endereco: {
@@ -106,35 +108,31 @@
           bairro: f.get("bairro") || null,
           cidade: f.get("cidade"),
         },
-        itens: Carrinho.itens(),
+        itens,
+        total,
         forma_pagamento: f.get("forma_pagamento"),
         troco_para: f.get("forma_pagamento") === "dinheiro" && f.get("troco_para") ? Number(f.get("troco_para")) : null,
       };
-      try {
-        const pedido = await API.post("/api/pedidos", payload);
 
-        // Monta mensagem WhatsApp
-        const cfg = await API.get("/api/config_publico");
-        const linhas = [
-          `*Novo pedido - ${cfg.loja_nome}*`,
-          `Cliente: ${payload.cliente_nome}`,
-          `Telefone: ${payload.cliente_telefone}`,
-          `Endereco: ${payload.endereco.rua}, ${payload.endereco.numero}${payload.endereco.complemento ? " - " + payload.endereco.complemento : ""} - ${payload.endereco.bairro || ""} - ${payload.endereco.cidade}`,
-          ``,
-          `*Itens:*`,
-          ...payload.itens.map(i => `- ${i.quantidade}x ${i.nome} (${fmtBRL(i.preco * i.quantidade)})`),
-          ``,
-          `Total: ${fmtBRL(Carrinho.total())}`,
-          `Pagamento: ${payload.forma_pagamento}${payload.troco_para ? " (troco para " + fmtBRL(payload.troco_para) + ")" : ""}`,
-          ``,
-          `Pedido #${pedido.id.slice(0,8)}`,
-        ].join("\n");
-        Carrinho.limpar();
-        const url = `https://wa.me/${cfg.whatsapp}?text=${encodeURIComponent(linhas)}`;
-        location.href = url;
-      } catch (err) {
-        alert("Erro ao enviar pedido: " + err.message);
-      }
+      const { data, error } = await sb.from("pedidos").insert(pedido).select().single();
+      if (error) { alert("Erro ao enviar pedido: " + error.message); return; }
+
+      const linhas = [
+        `*Novo pedido - ${LOJA.nome}*`,
+        `Cliente: ${pedido.cliente_nome}`,
+        `Telefone: ${pedido.cliente_telefone}`,
+        `Endereco: ${pedido.endereco.rua}, ${pedido.endereco.numero}${pedido.endereco.complemento ? " - " + pedido.endereco.complemento : ""} - ${pedido.endereco.bairro || ""} - ${pedido.endereco.cidade}`,
+        ``,
+        `*Itens:*`,
+        ...itens.map(i => `- ${i.quantidade}x ${i.nome} (${fmtBRL(i.preco * i.quantidade)})`),
+        ``,
+        `Total: ${fmtBRL(total)}`,
+        `Pagamento: ${pedido.forma_pagamento}${pedido.troco_para ? " (troco para " + fmtBRL(pedido.troco_para) + ")" : ""}`,
+        ``,
+        `Pedido #${data.id.slice(0,8)}`,
+      ].join("\n");
+      Carrinho.limpar();
+      location.href = `https://wa.me/${LOJA.whatsapp}?text=${encodeURIComponent(linhas)}`;
     });
   </script>
 </body>

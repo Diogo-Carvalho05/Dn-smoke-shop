@@ -31,5 +31,3 @@ const Carrinho = {
   total() { return this.itens().reduce((s, i) => s + i.preco * i.quantidade, 0); },
   qtdTotal() { return this.itens().reduce((s, i) => s + i.quantidade, 0); },
 };
-
-const fmtBRL = (v) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

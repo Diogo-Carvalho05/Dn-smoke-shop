@@ -16,12 +16,12 @@
       .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-marca-claro min-h-screen">
   <div id="nav"></div>
   <main class="max-w-6xl mx-auto px-4 py-6">
     <h2 class="text-2xl font-bold mb-4">Relatorios de venda</h2>
-
     <div class="card p-4 mb-4 grid md:grid-cols-4 gap-2">
       <input class="input" type="date" id="de" />
       <input class="input" type="date" id="ate" />
@@ -32,18 +32,16 @@
       </select>
       <button class="btn-primary" onclick="gerar()">Gerar</button>
     </div>
-
     <div id="resumo" class="grid md:grid-cols-3 gap-3 mb-4"></div>
     <div id="detalhe" class="space-y-4"></div>
   </main>
 
-  <script src="/js/api.js"></script>
+  <script src="/js/config.js"></script>
+  <script src="/js/auth.js"></script>
   <script>
-    if (!API.token()) location.href = "/admin/login.html";
+    Auth.requireLogin().then(u => { if (u) gerar(); });
     fetch("/admin/_nav.html").then(r => r.text()).then(h => document.getElementById("nav").innerHTML = h);
-    const fmtBRL = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-    // default ultimos 30 dias
     const hoje = new Date();
     const ha30 = new Date(); ha30.setDate(hoje.getDate() - 30);
     document.getElementById("de").value = ha30.toISOString().slice(0,10);
@@ -51,22 +49,39 @@
 
     async function gerar() {
       const de = document.getElementById("de").value;
-      const ate = document.getElementById("ate").value;
+      const ateStr = document.getElementById("ate").value + "T23:59:59";
       const origem = document.getElementById("origem").value;
-      const r = await API.get(`/api/relatorios?de=${de}&ate=${ate}&origem=${origem}`);
+
+      let online = [], pdv = [];
+
+      if (origem === "todos" || origem === "online") {
+        const { data } = await sb.from("pedidos")
+          .select("*").eq("status", "entregue")
+          .gte("entregue_em", de).lte("entregue_em", ateStr);
+        online = data || [];
+      }
+      if (origem === "todos" || origem === "pdv") {
+        const { data } = await sb.from("vendas_pdv")
+          .select("*").gte("criado_em", de).lte("criado_em", ateStr);
+        pdv = data || [];
+      }
+
+      const tOn = online.reduce((s, v) => s + Number(v.total), 0);
+      const tPdv = pdv.reduce((s, v) => s + Number(v.total), 0);
+
       document.getElementById("resumo").innerHTML = `
-        <div class="card p-4"><p class="text-sm text-gray-500">Online</p><p class="text-xl font-bold">${fmtBRL(r.online.total)}</p><p class="text-xs">${r.online.qtd} vendas</p></div>
-        <div class="card p-4"><p class="text-sm text-gray-500">PDV</p><p class="text-xl font-bold">${fmtBRL(r.pdv.total)}</p><p class="text-xs">${r.pdv.qtd} vendas</p></div>
-        <div class="card p-4 bg-marca-preto text-marca-branco"><p class="text-sm">Total geral</p><p class="text-xl font-bold">${fmtBRL(r.geral.total)}</p><p class="text-xs">${r.geral.qtd} vendas</p></div>
+        <div class="card p-4"><p class="text-sm text-gray-500">Online</p><p class="text-xl font-bold">${fmtBRL(tOn)}</p><p class="text-xs">${online.length} vendas</p></div>
+        <div class="card p-4"><p class="text-sm text-gray-500">PDV</p><p class="text-xl font-bold">${fmtBRL(tPdv)}</p><p class="text-xs">${pdv.length} vendas</p></div>
+        <div class="card p-4 bg-marca-preto text-marca-branco"><p class="text-sm">Total geral</p><p class="text-xl font-bold">${fmtBRL(tOn + tPdv)}</p><p class="text-xs">${online.length + pdv.length} vendas</p></div>
       `;
       document.getElementById("detalhe").innerHTML = `
         <details class="card p-3" ${origem !== "pdv" ? "open" : ""}>
-          <summary class="font-bold cursor-pointer">Vendas online (${r.online.qtd})</summary>
-          ${r.online.vendas.map(v => linha(v, v.entregue_em || v.criado_em, v.cliente_nome)).join("") || '<p class="text-sm text-gray-500 mt-2">Nenhum.</p>'}
+          <summary class="font-bold cursor-pointer">Vendas online (${online.length})</summary>
+          ${online.map(v => linha(v, v.entregue_em || v.criado_em, v.cliente_nome)).join("") || '<p class="text-sm text-gray-500 mt-2">Nenhum.</p>'}
         </details>
         <details class="card p-3" ${origem !== "online" ? "open" : ""}>
-          <summary class="font-bold cursor-pointer">Vendas PDV (${r.pdv.qtd})</summary>
-          ${r.pdv.vendas.map(v => linha(v, v.criado_em, "Balcao")).join("") || '<p class="text-sm text-gray-500 mt-2">Nenhum.</p>'}
+          <summary class="font-bold cursor-pointer">Vendas PDV (${pdv.length})</summary>
+          ${pdv.map(v => linha(v, v.criado_em, "Balcao")).join("") || '<p class="text-sm text-gray-500 mt-2">Nenhum.</p>'}
         </details>
       `;
     }
@@ -76,7 +91,6 @@
         <span class="font-bold">${fmtBRL(v.total)}</span>
       </div>`;
     }
-    gerar();
   </script>
 </body>
 </html>

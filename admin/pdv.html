@@ -16,6 +16,7 @@
       .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-marca-claro min-h-screen">
   <div id="nav"></div>
@@ -25,7 +26,6 @@
       <input class="input mb-3" id="busca" placeholder="Buscar produto..." />
       <div id="produtos" class="grid grid-cols-2 gap-2"></div>
     </div>
-
     <div>
       <h2 class="text-xl font-bold mb-3">Venda atual</h2>
       <div id="venda" class="card p-3 space-y-2 mb-3"></div>
@@ -43,17 +43,20 @@
     </div>
   </main>
 
-  <script src="/js/api.js"></script>
+  <script src="/js/config.js"></script>
+  <script src="/js/auth.js"></script>
   <script>
-    if (!API.token()) location.href = "/admin/login.html";
-    fetch("/admin/_nav.html").then(r => r.text()).then(h => document.getElementById("nav").innerHTML = h);
-    const fmtBRL = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
     let produtos = [];
-    let venda = []; // [{ produto_id, nome, preco, quantidade }]
+    let venda = [];
+    let user;
+
+    Auth.requireLogin().then(async u => { if (!u) return; user = u; await carregar(); });
+    fetch("/admin/_nav.html").then(r => r.text()).then(h => document.getElementById("nav").innerHTML = h);
 
     async function carregar() {
-      produtos = await API.get("/api/produtos?ativos=1");
+      const { data, error } = await sb.from("produtos").select("*").eq("ativo", true).order("nome");
+      if (error) { alert(error.message); return; }
+      produtos = data;
       render();
     }
     function render() {
@@ -66,7 +69,6 @@
           <p class="text-xs">${fmtBRL(p.preco)} - est: ${p.estoque}</p>
         </button>
       `).join("");
-
       document.getElementById("venda").innerHTML = venda.length ? venda.map((i, idx) => `
         <div class="flex items-center gap-2 text-sm">
           <span class="flex-1">${i.nome}</span>
@@ -91,18 +93,21 @@
     }
     async function finalizar() {
       if (!venda.length) return;
-      try {
-        await API.post("/api/vendas_pdv", {
-          itens: venda,
-          forma_pagamento: document.getElementById("pg").value,
-        });
-        venda = [];
-        await carregar();
-        alert("Venda registrada e estoque atualizado.");
-      } catch (e) { alert("Erro: " + e.message); }
+      const total = venda.reduce((s, i) => s + i.preco * i.quantidade, 0);
+      const { error } = await sb.from("vendas_pdv").insert({
+        itens: venda,
+        total,
+        forma_pagamento: document.getElementById("pg").value,
+        admin_id: user.id,
+      });
+      if (error) { alert(error.message); return; }
+      const { error: rpcErr } = await sb.rpc("baixar_estoque_pdv", { p_itens: venda });
+      if (rpcErr) alert("Estoque: " + rpcErr.message);
+      venda = [];
+      await carregar();
+      alert("Venda registrada e estoque atualizado.");
     }
     document.getElementById("busca").addEventListener("input", render);
-    carregar();
   </script>
 </body>
 </html>
