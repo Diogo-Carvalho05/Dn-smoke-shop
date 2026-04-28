@@ -16,9 +16,18 @@ class handler(BaseHTTPRequestHandler):
         res = sb.table("admins").select("*").eq("email", email).limit(1).execute()
         admin = res.data[0] if res.data else None
 
-        if not admin or not bcrypt.checkpw(senha.encode(), admin["senha_hash"].encode()):
-            self._json(401, {"erro": "credenciais invalidas"})
-            return
+        if not admin:
+            self._json(401, {"erro": "credenciais invalidas"}); return
+
+        senha_armazenada = admin["senha_hash"]
+        # Se comecar com $2 e bcrypt; senao trata como texto puro (compativel com seed simples)
+        if senha_armazenada.startswith("$2"):
+            ok = bcrypt.checkpw(senha.encode(), senha_armazenada.encode())
+        else:
+            ok = senha == senha_armazenada
+
+        if not ok:
+            self._json(401, {"erro": "credenciais invalidas"}); return
 
         token = gerar_token(admin["id"], admin["email"])
         self._json(200, {"token": token, "email": admin["email"]})
