@@ -97,7 +97,9 @@
       const f = new FormData(e.target);
       const itens = Carrinho.itens();
       const total = Carrinho.total();
+      const pedidoId = crypto.randomUUID();
       const pedido = {
+        id: pedidoId,
         cliente_nome: f.get("nome"),
         cliente_telefone: f.get("telefone"),
         endereco: {
@@ -114,7 +116,7 @@
         troco_para: f.get("forma_pagamento") === "dinheiro" && f.get("troco_para") ? Number(f.get("troco_para")) : null,
       };
 
-      const { data, error } = await sb.from("pedidos").insert(pedido).select().single();
+      const { error } = await sb.from("pedidos").insert(pedido);
       if (error) { alert("Erro ao enviar pedido: " + error.message); return; }
 
       const linhas = [
@@ -129,7 +131,7 @@
         `Total: ${fmtBRL(total)}`,
         `Pagamento: ${pedido.forma_pagamento}${pedido.troco_para ? " (troco para " + fmtBRL(pedido.troco_para) + ")" : ""}`,
         ``,
-        `Pedido #${data.id.slice(0,8)}`,
+        `Pedido #${pedidoId.slice(0,8)}`,
       ].join("\n");
       Carrinho.limpar();
       location.href = `https://wa.me/${LOJA.whatsapp}?text=${encodeURIComponent(linhas)}`;
