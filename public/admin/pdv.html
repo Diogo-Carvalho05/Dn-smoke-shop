@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PDV - Admin</title>
+  <link rel="stylesheet" href="/css/output.css" />
+</head>
+<body class="bg-marca-claro min-h-screen">
+  <div id="nav"></div>
+  <main class="max-w-6xl mx-auto px-4 py-6 grid md:grid-cols-2 gap-4">
+    <div>
+      <h2 class="text-xl font-bold mb-3">Produtos</h2>
+      <input class="input mb-3" id="busca" placeholder="Buscar produto..." />
+      <div id="produtos" class="grid grid-cols-2 gap-2"></div>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold mb-3">Venda atual</h2>
+      <div id="venda" class="card p-3 space-y-2 mb-3"></div>
+      <div class="card p-3">
+        <div class="flex justify-between font-bold text-lg mb-2">
+          <span>Total</span><span id="total">R$ 0,00</span>
+        </div>
+        <select id="pg" class="input mb-2">
+          <option value="dinheiro">Dinheiro</option>
+          <option value="pix">PIX</option>
+          <option value="cartao">Cartao</option>
+        </select>
+        <button class="btn-primary w-full" onclick="finalizar()">Finalizar venda</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!API.token()) location.href = "/admin/login.html";
+    fetch("/admin/_nav.html").then(r => r.text()).then(h => document.getElementById("nav").innerHTML = h);
+    const fmtBRL = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+    let produtos = [];
+    let venda = []; // [{ produto_id, nome, preco, quantidade }]
+
+    async function carregar() {
+      produtos = await API.get("/api/produtos?ativos=1");
+      render();
+    }
+    function render() {
+      const filtro = document.getElementById("busca").value.toLowerCase();
+      const lista = produtos.filter(p => p.nome.toLowerCase().includes(filtro));
+      document.getElementById("produtos").innerHTML = lista.map(p => `
+        <button class="card p-2 text-left hover:bg-gray-100 ${p.estoque <= 0 ? "opacity-50" : ""}"
+                onclick='add(${JSON.stringify(p)})' ${p.estoque <= 0 ? "disabled" : ""}>
+          <p class="font-semibold text-sm">${p.nome}</p>
+          <p class="text-xs">${fmtBRL(p.preco)} - est: ${p.estoque}</p>
+        </button>
+      `).join("");
+
+      document.getElementById("venda").innerHTML = venda.length ? venda.map((i, idx) => `
+        <div class="flex items-center gap-2 text-sm">
+          <span class="flex-1">${i.nome}</span>
+          <button class="btn-outline px-2 py-0" onclick="qtd(${idx}, -1)">-</button>
+          <span class="w-6 text-center">${i.quantidade}</span>
+          <button class="btn-outline px-2 py-0" onclick="qtd(${idx}, 1)">+</button>
+          <span class="w-20 text-right font-bold">${fmtBRL(i.preco * i.quantidade)}</span>
+        </div>
+      `).join("") : '<p class="text-gray-500 text-sm">Nenhum item.</p>';
+      document.getElementById("total").textContent = fmtBRL(venda.reduce((s, i) => s + i.preco * i.quantidade, 0));
+    }
+    function add(p) {
+      const i = venda.findIndex(x => x.produto_id === p.id);
+      if (i >= 0) venda[i].quantidade++;
+      else venda.push({ produto_id: p.id, nome: p.nome, preco: Number(p.preco), quantidade: 1 });
+      render();
+    }
+    function qtd(idx, d) {
+      venda[idx].quantidade += d;
+      if (venda[idx].quantidade <= 0) venda.splice(idx, 1);
+      render();
+    }
+    async function finalizar() {
+      if (!venda.length) return;
+      try {
+        await API.post("/api/vendas_pdv", {
+          itens: venda,
+          forma_pagamento: document.getElementById("pg").value,
+        });
+        venda = [];
+        await carregar();
+        alert("Venda registrada e estoque atualizado.");
+      } catch (e) { alert("Erro: " + e.message); }
+    }
+    document.getElementById("busca").addEventListener("input", render);
+    carregar();
+  </script>
+</body>
+</html>
