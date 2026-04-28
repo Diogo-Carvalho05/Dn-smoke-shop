@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pedidos - Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: { marca: { preto: "#0a0a0a", branco: "#ffffff", cinza: "#1a1a1a", claro: "#f5f5f5" } } } } };
+  </script>
+  <style type="text/tailwindcss">
+    @layer components {
+      .btn-primary { @apply bg-marca-preto text-marca-branco px-4 py-2 rounded-lg font-medium hover:bg-marca-cinza transition disabled:opacity-50; }
+      .btn-outline { @apply border border-marca-preto text-marca-preto px-4 py-2 rounded-lg font-medium hover:bg-marca-preto hover:text-marca-branco transition; }
+      .input { @apply w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-marca-preto; }
+      .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
+    }
+  </style>
+</head>
+<body class="bg-marca-claro min-h-screen">
+  <div id="nav"></div>
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    <h2 class="text-2xl font-bold mb-4">Pedidos online</h2>
+    <div class="flex gap-2 mb-4 flex-wrap">
+      <button class="btn-outline" onclick="filtrar('')">Todos</button>
+      <button class="btn-outline" onclick="filtrar('pendente')">Pendentes</button>
+      <button class="btn-outline" onclick="filtrar('confirmado')">Confirmados</button>
+      <button class="btn-outline" onclick="filtrar('entregue')">Entregues</button>
+      <button class="btn-outline" onclick="filtrar('cancelado')">Cancelados</button>
+    </div>
+    <div id="lista" class="space-y-3"></div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!API.token()) location.href = "/admin/login.html";
+    fetch("/admin/_nav.html").then(r => r.text()).then(h => document.getElementById("nav").innerHTML = h);
+    const fmtBRL = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+    let filtroAtual = "";
+    async function filtrar(s) {
+      filtroAtual = s;
+      const lista = await API.get("/api/pedidos" + (s ? "?status=" + s : ""));
+      document.getElementById("lista").innerHTML = lista.map(p => `
+        <div class="card p-4">
+          <div class="flex justify-between flex-wrap gap-2">
+            <div>
+              <p class="font-bold">${p.cliente_nome} <span class="text-gray-500 text-sm">(${p.cliente_telefone})</span></p>
+              <p class="text-xs text-gray-500">${new Date(p.criado_em).toLocaleString("pt-BR")} - #${p.id.slice(0,8)}</p>
+            </div>
+            <span class="px-2 py-1 rounded text-xs font-bold ${badge(p.status)}">${p.status.toUpperCase()}</span>
+          </div>
+          <p class="text-sm mt-2">
+            ${p.endereco.rua}, ${p.endereco.numero}${p.endereco.complemento ? " - " + p.endereco.complemento : ""}
+            ${p.endereco.bairro ? " - " + p.endereco.bairro : ""} - ${p.endereco.cidade}
+            ${p.endereco.cep ? " - CEP " + p.endereco.cep : ""}
+          </p>
+          <ul class="text-sm mt-2 list-disc list-inside">
+            ${p.itens.map(i => `<li>${i.quantidade}x ${i.nome} - ${fmtBRL(i.preco * i.quantidade)}</li>`).join("")}
+          </ul>
+          <p class="mt-2 font-bold">Total: ${fmtBRL(p.total)} - ${p.forma_pagamento}${p.troco_para ? " (troco p/ " + fmtBRL(p.troco_para) + ")" : ""}</p>
+          <div class="flex gap-2 mt-3 flex-wrap">
+            ${p.status === "pendente" ? `<button class="btn-primary" onclick="mudar('${p.id}', 'confirmado')">Confirmar</button>` : ""}
+            ${p.status === "confirmado" ? `<button class="btn-primary" onclick="mudar('${p.id}', 'entregue')">Marcar entregue (baixa estoque)</button>` : ""}
+            ${["pendente","confirmado"].includes(p.status) ? `<button class="btn-outline" onclick="mudar('${p.id}', 'cancelado')">Cancelar</button>` : ""}
+          </div>
+        </div>
+      `).join("") || '<p class="text-gray-500 text-center py-8">Nenhum pedido.</p>';
+    }
+    function badge(s) {
+      return { pendente: "bg-yellow-200 text-yellow-900", confirmado: "bg-blue-200 text-blue-900",
+               entregue: "bg-green-200 text-green-900", cancelado: "bg-red-200 text-red-900" }[s] || "bg-gray-200";
+    }
+    async function mudar(id, status) {
+      if (!confirm("Confirmar mudanca para " + status + "?")) return;
+      await API.put("/api/pedidos", { id, status });
+      filtrar(filtroAtual);
+    }
+    filtrar("");
+  </script>
+</body>
+</html>

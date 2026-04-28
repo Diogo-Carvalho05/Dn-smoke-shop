@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Carrinho - Dn Smoke Shop</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: { marca: { preto: "#0a0a0a", branco: "#ffffff", cinza: "#1a1a1a", claro: "#f5f5f5" } } } } };
+  </script>
+  <style type="text/tailwindcss">
+    @layer components {
+      .btn-primary { @apply bg-marca-preto text-marca-branco px-4 py-2 rounded-lg font-medium hover:bg-marca-cinza transition disabled:opacity-50; }
+      .btn-outline { @apply border border-marca-preto text-marca-preto px-4 py-2 rounded-lg font-medium hover:bg-marca-preto hover:text-marca-branco transition; }
+      .input { @apply w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-marca-preto; }
+      .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
+    }
+  </style>
+</head>
+<body class="bg-marca-claro text-marca-preto min-h-screen">
+  <header class="bg-marca-preto text-marca-branco">
+    <div class="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+      <a href="/" class="text-xl font-bold tracking-wide">DN SMOKE SHOP</a>
+      <a href="/" class="text-sm underline">Continuar comprando</a>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-4 py-6">
+    <h2 class="text-2xl font-semibold mb-4">Seu carrinho</h2>
+    <div id="itens" class="space-y-3"></div>
+    <div id="vazio" class="hidden text-center text-gray-500 py-12">Carrinho vazio.</div>
+
+    <div id="resumo" class="card p-4 mt-6 hidden">
+      <div class="flex justify-between text-lg font-bold">
+        <span>Total</span><span id="total"></span>
+      </div>
+      <a href="/checkout.html" class="btn-primary block text-center mt-4">Finalizar pedido</a>
+    </div>
+  </main>
+
+  <script src="/js/carrinho.js"></script>
+  <script>
+    function render() {
+      const itens = Carrinho.itens();
+      const wrap = document.getElementById("itens");
+      const vazio = document.getElementById("vazio");
+      const resumo = document.getElementById("resumo");
+      if (!itens.length) {
+        wrap.innerHTML = ""; vazio.classList.remove("hidden"); resumo.classList.add("hidden"); return;
+      }
+      vazio.classList.add("hidden"); resumo.classList.remove("hidden");
+      wrap.innerHTML = itens.map(i => `
+        <div class="card p-3 flex items-center gap-3">
+          <div class="flex-1">
+            <p class="font-semibold">${i.nome}</p>
+            <p class="text-sm text-gray-500">${fmtBRL(i.preco)} cada</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="btn-outline px-3 py-1" onclick="setQtd('${i.produto_id}', ${i.quantidade - 1})">-</button>
+            <span class="font-bold w-6 text-center">${i.quantidade}</span>
+            <button class="btn-outline px-3 py-1" onclick="setQtd('${i.produto_id}', ${i.quantidade + 1})">+</button>
+          </div>
+          <p class="font-bold w-24 text-right">${fmtBRL(i.preco * i.quantidade)}</p>
+        </div>
+      `).join("");
+      document.getElementById("total").textContent = fmtBRL(Carrinho.total());
+    }
+    function setQtd(id, q) { Carrinho.setQtd(id, q); render(); }
+    render();
+  </script>
+</body>
+</html>

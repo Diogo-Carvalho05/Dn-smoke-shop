@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login Admin - Dn Smoke Shop</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: { marca: { preto: "#0a0a0a", branco: "#ffffff", cinza: "#1a1a1a", claro: "#f5f5f5" } } } } };
+  </script>
+  <style type="text/tailwindcss">
+    @layer components {
+      .btn-primary { @apply bg-marca-preto text-marca-branco px-4 py-2 rounded-lg font-medium hover:bg-marca-cinza transition disabled:opacity-50; }
+      .btn-outline { @apply border border-marca-preto text-marca-preto px-4 py-2 rounded-lg font-medium hover:bg-marca-preto hover:text-marca-branco transition; }
+      .input { @apply w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-marca-preto; }
+      .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
+    }
+  </style>
+</head>
+<body class="bg-marca-preto min-h-screen flex items-center justify-center px-4">
+  <form id="form" class="card p-6 w-full max-w-sm space-y-4">
+    <h1 class="text-xl font-bold text-center">DN SMOKE SHOP</h1>
+    <p class="text-sm text-center text-gray-500">Painel administrativo</p>
+    <input class="input" name="email" type="email" placeholder="E-mail" required />
+    <input class="input" name="senha" type="password" placeholder="Senha" required />
+    <button class="btn-primary w-full" type="submit">Entrar</button>
+    <p id="erro" class="text-red-600 text-sm text-center hidden"></p>
+  </form>
+  <script src="/js/api.js"></script>
+  <script>
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      try {
+        const r = await API.post("/api/auth", { email: f.get("email"), senha: f.get("senha") });
+        API.setToken(r.token);
+        location.href = "/admin/dashboard.html";
+      } catch (err) {
+        const el = document.getElementById("erro");
+        el.textContent = err.message;
+        el.classList.remove("hidden");
+      }
+    });
+  </script>
+</body>
+</html>

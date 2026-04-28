@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Checkout - Dn Smoke Shop</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: { marca: { preto: "#0a0a0a", branco: "#ffffff", cinza: "#1a1a1a", claro: "#f5f5f5" } } } } };
+  </script>
+  <style type="text/tailwindcss">
+    @layer components {
+      .btn-primary { @apply bg-marca-preto text-marca-branco px-4 py-2 rounded-lg font-medium hover:bg-marca-cinza transition disabled:opacity-50; }
+      .btn-outline { @apply border border-marca-preto text-marca-preto px-4 py-2 rounded-lg font-medium hover:bg-marca-preto hover:text-marca-branco transition; }
+      .input { @apply w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-marca-preto; }
+      .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
+    }
+  </style>
+</head>
+<body class="bg-marca-claro text-marca-preto min-h-screen">
+  <header class="bg-marca-preto text-marca-branco">
+    <div class="max-w-2xl mx-auto px-4 py-4">
+      <a href="/" class="text-xl font-bold tracking-wide">DN SMOKE SHOP</a>
+    </div>
+  </header>
+
+  <main class="max-w-2xl mx-auto px-4 py-6">
+    <h2 class="text-2xl font-semibold mb-4">Finalizar pedido</h2>
+
+    <form id="form" class="space-y-4">
+      <div class="card p-4 space-y-3">
+        <h3 class="font-semibold">Seus dados</h3>
+        <input class="input" name="nome" placeholder="Nome completo" required />
+        <input class="input" name="telefone" placeholder="Telefone / WhatsApp" required />
+      </div>
+
+      <div class="card p-4 space-y-3">
+        <h3 class="font-semibold">Endereco de entrega</h3>
+        <div class="flex gap-2">
+          <input class="input" name="cep" placeholder="CEP (opcional)" maxlength="9" />
+          <button type="button" class="btn-outline whitespace-nowrap" onclick="buscarCep()">Buscar</button>
+        </div>
+        <input class="input" name="rua" placeholder="Rua *" required />
+        <div class="grid grid-cols-2 gap-2">
+          <input class="input" name="numero" placeholder="Numero *" required />
+          <input class="input" name="complemento" placeholder="Complemento" />
+        </div>
+        <input class="input" name="bairro" placeholder="Bairro" />
+        <input class="input" name="cidade" placeholder="Cidade *" required />
+      </div>
+
+      <div class="card p-4 space-y-3">
+        <h3 class="font-semibold">Pagamento</h3>
+        <select class="input" name="forma_pagamento" id="pg" required>
+          <option value="">Selecione...</option>
+          <option value="cartao">Cartao (na entrega)</option>
+          <option value="pix">PIX</option>
+          <option value="dinheiro">Dinheiro</option>
+        </select>
+        <div id="box-troco" class="hidden">
+          <label class="text-sm text-gray-600">Precisa de troco para quanto?</label>
+          <input class="input mt-1" name="troco_para" type="number" step="0.01" placeholder="Deixe em branco se nao precisar" />
+        </div>
+      </div>
+
+      <div class="card p-4">
+        <div class="flex justify-between font-bold text-lg">
+          <span>Total</span><span id="total"></span>
+        </div>
+        <button class="btn-primary w-full mt-4" type="submit">Confirmar pedido</button>
+      </div>
+    </form>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/carrinho.js"></script>
+  <script>
+    document.getElementById("total").textContent = fmtBRL(Carrinho.total());
+    if (!Carrinho.itens().length) location.href = "/";
+
+    document.getElementById("pg").addEventListener("change", e => {
+      document.getElementById("box-troco").classList.toggle("hidden", e.target.value !== "dinheiro");
+    });
+
+    async function buscarCep() {
+      const cep = document.querySelector('[name=cep]').value.replace(/\D/g, "");
+      if (cep.length !== 8) { alert("CEP invalido"); return; }
+      const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`).then(r => r.json());
+      if (r.erro) { alert("CEP nao encontrado"); return; }
+      document.querySelector('[name=rua]').value = r.logradouro || "";
+      document.querySelector('[name=bairro]').value = r.bairro || "";
+      document.querySelector('[name=cidade]').value = r.localidade || "";
+    }
+
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const payload = {
+        cliente_nome: f.get("nome"),
+        cliente_telefone: f.get("telefone"),
+        endereco: {
+          cep: f.get("cep") || null,
+          rua: f.get("rua"),
+          numero: f.get("numero"),
+          complemento: f.get("complemento") || null,
+          bairro: f.get("bairro") || null,
+          cidade: f.get("cidade"),
+        },
+        itens: Carrinho.itens(),
+        forma_pagamento: f.get("forma_pagamento"),
+        troco_para: f.get("forma_pagamento") === "dinheiro" && f.get("troco_para") ? Number(f.get("troco_para")) : null,
+      };
+      try {
+        const pedido = await API.post("/api/pedidos", payload);
+
+        // Monta mensagem WhatsApp
+        const cfg = await API.get("/api/config_publico");
+        const linhas = [
+          `*Novo pedido - ${cfg.loja_nome}*`,
+          `Cliente: ${payload.cliente_nome}`,
+          `Telefone: ${payload.cliente_telefone}`,
+          `Endereco: ${payload.endereco.rua}, ${payload.endereco.numero}${payload.endereco.complemento ? " - " + payload.endereco.complemento : ""} - ${payload.endereco.bairro || ""} - ${payload.endereco.cidade}`,
+          ``,
+          `*Itens:*`,
+          ...payload.itens.map(i => `- ${i.quantidade}x ${i.nome} (${fmtBRL(i.preco * i.quantidade)})`),
+          ``,
+          `Total: ${fmtBRL(Carrinho.total())}`,
+          `Pagamento: ${payload.forma_pagamento}${payload.troco_para ? " (troco para " + fmtBRL(payload.troco_para) + ")" : ""}`,
+          ``,
+          `Pedido #${pedido.id.slice(0,8)}`,
+        ].join("\n");
+        Carrinho.limpar();
+        const url = `https://wa.me/${cfg.whatsapp}?text=${encodeURIComponent(linhas)}`;
+        location.href = url;
+      } catch (err) {
+        alert("Erro ao enviar pedido: " + err.message);
+      }
+    });
+  </script>
+</body>
+</html>

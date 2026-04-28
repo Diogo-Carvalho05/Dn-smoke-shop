@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Relatorios - Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: { marca: { preto: "#0a0a0a", branco: "#ffffff", cinza: "#1a1a1a", claro: "#f5f5f5" } } } } };
+  </script>
+  <style type="text/tailwindcss">
+    @layer components {
+      .btn-primary { @apply bg-marca-preto text-marca-branco px-4 py-2 rounded-lg font-medium hover:bg-marca-cinza transition disabled:opacity-50; }
+      .btn-outline { @apply border border-marca-preto text-marca-preto px-4 py-2 rounded-lg font-medium hover:bg-marca-preto hover:text-marca-branco transition; }
+      .input { @apply w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-marca-preto; }
+      .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
+    }
+  </style>
+</head>
+<body class="bg-marca-claro min-h-screen">
+  <div id="nav"></div>
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    <h2 class="text-2xl font-bold mb-4">Relatorios de venda</h2>
+
+    <div class="card p-4 mb-4 grid md:grid-cols-4 gap-2">
+      <input class="input" type="date" id="de" />
+      <input class="input" type="date" id="ate" />
+      <select class="input" id="origem">
+        <option value="todos">Online + PDV</option>
+        <option value="online">Somente Online</option>
+        <option value="pdv">Somente PDV</option>
+      </select>
+      <button class="btn-primary" onclick="gerar()">Gerar</button>
+    </div>
+
+    <div id="resumo" class="grid md:grid-cols-3 gap-3 mb-4"></div>
+    <div id="detalhe" class="space-y-4"></div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!API.token()) location.href = "/admin/login.html";
+    fetch("/admin/_nav.html").then(r => r.text()).then(h => document.getElementById("nav").innerHTML = h);
+    const fmtBRL = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+    // default ultimos 30 dias
+    const hoje = new Date();
+    const ha30 = new Date(); ha30.setDate(hoje.getDate() - 30);
+    document.getElementById("de").value = ha30.toISOString().slice(0,10);
+    document.getElementById("ate").value = hoje.toISOString().slice(0,10);
+
+    async function gerar() {
+      const de = document.getElementById("de").value;
+      const ate = document.getElementById("ate").value;
+      const origem = document.getElementById("origem").value;
+      const r = await API.get(`/api/relatorios?de=${de}&ate=${ate}&origem=${origem}`);
+      document.getElementById("resumo").innerHTML = `
+        <div class="card p-4"><p class="text-sm text-gray-500">Online</p><p class="text-xl font-bold">${fmtBRL(r.online.total)}</p><p class="text-xs">${r.online.qtd} vendas</p></div>
+        <div class="card p-4"><p class="text-sm text-gray-500">PDV</p><p class="text-xl font-bold">${fmtBRL(r.pdv.total)}</p><p class="text-xs">${r.pdv.qtd} vendas</p></div>
+        <div class="card p-4 bg-marca-preto text-marca-branco"><p class="text-sm">Total geral</p><p class="text-xl font-bold">${fmtBRL(r.geral.total)}</p><p class="text-xs">${r.geral.qtd} vendas</p></div>
+      `;
+      document.getElementById("detalhe").innerHTML = `
+        <details class="card p-3" ${origem !== "pdv" ? "open" : ""}>
+          <summary class="font-bold cursor-pointer">Vendas online (${r.online.qtd})</summary>
+          ${r.online.vendas.map(v => linha(v, v.entregue_em || v.criado_em, v.cliente_nome)).join("") || '<p class="text-sm text-gray-500 mt-2">Nenhum.</p>'}
+        </details>
+        <details class="card p-3" ${origem !== "online" ? "open" : ""}>
+          <summary class="font-bold cursor-pointer">Vendas PDV (${r.pdv.qtd})</summary>
+          ${r.pdv.vendas.map(v => linha(v, v.criado_em, "Balcao")).join("") || '<p class="text-sm text-gray-500 mt-2">Nenhum.</p>'}
+        </details>
+      `;
+    }
+    function linha(v, data, ref) {
+      return `<div class="border-t py-2 text-sm flex justify-between">
+        <span>${new Date(data).toLocaleString("pt-BR")} - ${ref} - ${v.forma_pagamento}</span>
+        <span class="font-bold">${fmtBRL(v.total)}</span>
+      </div>`;
+    }
+    gerar();
+  </script>
+</body>
+</html>
