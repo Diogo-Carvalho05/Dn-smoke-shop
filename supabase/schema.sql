@@ -77,6 +77,14 @@ create policy pedidos_update_auth on pedidos for update to authenticated using (
 drop policy if exists vendas_pdv_all_auth on vendas_pdv;
 create policy vendas_pdv_all_auth on vendas_pdv for all to authenticated using (true) with check (true);
 
+-- ---------- GRANTS (necessario alem das policies de RLS) ----------
+grant usage on schema public to anon, authenticated;
+grant select on produtos to anon, authenticated;
+grant insert, update, delete on produtos to authenticated;
+grant insert on pedidos to anon, authenticated;
+grant select, update on pedidos to authenticated;
+grant select, insert, update, delete on vendas_pdv to authenticated;
+
 -- ---------- STORAGE ----------
 insert into storage.buckets (id, name, public)
 values ('produtos', 'produtos', true)
