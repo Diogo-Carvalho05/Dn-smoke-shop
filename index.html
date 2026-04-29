@@ -16,14 +16,24 @@
       .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
     }
   </style>
+  <style>
+    /* animacao do ponto voando para o carrinho */
+    #fly-dot { position:fixed; pointer-events:none; z-index:9999; border-radius:50%; background:#fff; width:18px; height:18px; transition: left .55s cubic-bezier(.3,.8,.3,1), top .55s cubic-bezier(.3,.8,.3,1), opacity .55s, transform .55s; }
+    #badge-carrinho { transition: transform .25s; display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; }
+  </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-marca-claro text-marca-preto min-h-screen">
   <header class="bg-marca-preto text-marca-branco">
     <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-      <h1 class="text-xl font-bold tracking-wide">DN SMOKE SHOP</h1>
-      <a href="/carrinho.html" class="relative">
-        Carrinho <span id="badge-carrinho" class="ml-1 bg-marca-branco text-marca-preto rounded-full px-2 text-xs font-bold">0</span>
+      <a href="/"><img src="/assets/logo.png" alt="Dn Smoke Shop" class="h-10 w-auto object-contain"></a>
+      <!-- Carrinho com icone SVG -->
+      <a href="/carrinho.html" class="flex items-center gap-1.5 hover:opacity-80 transition-opacity">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+        </svg>
+        <span id="badge-carrinho" class="bg-white text-[#0a0a0a] rounded-full px-1.5 text-[10px] font-black leading-none">0</span>
       </a>
     </div>
   </header>
@@ -57,14 +67,47 @@
           <p class="text-xs text-gray-500 flex-1">${p.descricao || ""}</p>
           <p class="font-bold mt-2">${fmtBRL(p.preco)}</p>
           <p class="text-xs text-gray-500 mb-2">Estoque: ${p.estoque}</p>
-          <button class="btn-primary text-sm" onclick='adicionar(${JSON.stringify(p)})' ${p.estoque <= 0 ? "disabled" : ""}>
+          <button class="btn-primary text-sm" onclick='adicionar(${JSON.stringify(p)}, this)' ${p.estoque <= 0 ? "disabled" : ""}>
             ${p.estoque <= 0 ? "Sem estoque" : "Adicionar"}
           </button>
         </div>
       `).join("");
     }
-    function adicionar(p) { if (Carrinho.add(p, 1)) atualizarBadge(); }
+    function adicionar(p, btn) {
+      if (!Carrinho.add(p, 1)) return;
+      atualizarBadge();
+      flyToCart(btn);
+    }
     function atualizarBadge() { document.getElementById("badge-carrinho").textContent = Carrinho.qtdTotal(); }
+
+    function flyToCart(srcEl) {
+      const badge = document.getElementById("badge-carrinho");
+      if (!badge || !srcEl) return;
+      const from = srcEl.closest(".card").getBoundingClientRect();
+      const to   = badge.getBoundingClientRect();
+
+      const dot = document.createElement("div");
+      dot.id = "fly-dot";
+      dot.style.left    = `${from.left + from.width  / 2 - 9}px`;
+      dot.style.top     = `${from.top  + from.height / 2 - 9}px`;
+      dot.style.opacity = "1";
+      dot.style.transform = "scale(1)";
+      document.body.appendChild(dot);
+
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        dot.style.left      = `${to.left + to.width  / 2 - 9}px`;
+        dot.style.top       = `${to.top  + to.height / 2 - 9}px`;
+        dot.style.transform = "scale(0.1)";
+        dot.style.opacity   = "0";
+      }));
+
+      setTimeout(() => {
+        dot.remove();
+        badge.style.transform = "scale(1.7)";
+        setTimeout(() => badge.style.transform = "scale(1)", 250);
+      }, 580);
+    }
+
     atualizarBadge();
     carregar();
   </script>
