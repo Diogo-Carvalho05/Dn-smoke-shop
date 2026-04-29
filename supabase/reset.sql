@@ -27,8 +27,6 @@ truncate table vendas_pdv restart identity cascade;
 -- 3. Limpa o catalogo de produtos
 truncate table produtos restart identity cascade;
 
--- 4. Limpa as imagens enviadas pro Storage (bucket "produtos")
-delete from storage.objects where bucket_id = 'produtos';
 
 commit;
 
