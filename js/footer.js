@@ -38,6 +38,7 @@
     html.dark .bg-red-200                { background-color:#7f1d1d!important; color:#fecaca!important; }
     html.dark footer                      { border-color:#2d2d2d!important; color:#6b7280!important; }
     html.dark footer a                    { color:#e5e7eb!important; }
+    html.dark #badge-carrinho             { background-color:#ffffff!important; color:#0a0a0a!important; }
     html.dark .btn-primary                { background-color:#f1f1f1!important; color:#0a0a0a!important; }
     html.dark .btn-primary:hover          { background-color:#ffffff!important; color:#0a0a0a!important; }
     html.dark .btn-primary:disabled       { background-color:#3d3d3d!important; color:#888!important; }
