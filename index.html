@@ -49,24 +49,40 @@
   <script src="/js/idade.js"></script>
   <script src="/js/carrinho.js"></script>
   <script>
+    let taxaAtiva = false;
+
     async function carregar() {
-      const { data: produtos, error } = await sb.from("produtos").select("*").eq("ativo", true).order("nome");
-      if (error) { alert("Erro: " + error.message); return; }
+      const [prodRes, cfgRes] = await Promise.all([
+        sb.from("produtos").select("*").eq("ativo", true).order("nome"),
+        sb.from("config_loja").select("taxa_entrega_ativa").eq("id", 1).single(),
+      ]);
+      if (prodRes.error) { alert("Erro: " + prodRes.error.message); return; }
+      taxaAtiva = cfgRes.data?.taxa_entrega_ativa ?? false;
+
+      const produtos = prodRes.data;
       const lista = document.getElementById("lista");
       if (!produtos.length) { document.getElementById("vazio").classList.remove("hidden"); return; }
 
-      // Promovidos primeiro, depois restante por nome
+      const temPromo    = p => p.preco_promocao !== null && p.preco_promocao < p.preco;
+      const temDestaque = p => temPromo(p) || (taxaAtiva && p.isenta_taxa_entrega);
+
+      // Ordem: 1º destaque (promo + frete gratis), 2º restante — ambos por nome
       const ordenados = [
-        ...produtos.filter(p => p.preco_promocao !== null && p.preco_promocao < p.preco),
-        ...produtos.filter(p => !(p.preco_promocao !== null && p.preco_promocao < p.preco)),
+        ...produtos.filter(p => temDestaque(p)),
+        ...produtos.filter(p => !temDestaque(p)),
       ];
 
       lista.innerHTML = ordenados.map(p => {
-        const temPromo = p.preco_promocao !== null && p.preco_promocao < p.preco;
-        const precoFinal = temPromo ? p.preco_promocao : p.preco;
+        const promo       = temPromo(p);
+        const freteGratis = taxaAtiva && p.isenta_taxa_entrega;
+        const precoFinal  = promo ? p.preco_promocao : p.preco;
+        const ringCor     = promo ? "ring-red-500" : freteGratis ? "ring-green-500" : "";
         return `
-        <div class="card p-3 flex flex-col relative ${temPromo ? "ring-2 ring-red-500" : ""}">
-          ${temPromo ? `<span class="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full z-10">PROMO</span>` : ""}
+        <div class="card p-3 flex flex-col relative ${ringCor ? "ring-2 " + ringCor : ""}">
+          <div class="absolute top-2 left-2 flex flex-col gap-1 z-10">
+            ${promo       ? `<span class="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">PROMO</span>` : ""}
+            ${freteGratis ? `<span class="bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">FRETE GRATIS</span>` : ""}
+          </div>
           <div class="aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden flex items-center justify-center">
             ${p.imagem_url
               ? `<img src="${esc(p.imagem_url)}" loading="lazy" decoding="async"
@@ -78,7 +94,7 @@
           <h3 class="font-semibold text-sm">${esc(p.nome)}</h3>
           <p class="text-xs text-gray-500 flex-1">${esc(p.descricao || "")}</p>
           <div class="mt-2">
-            ${temPromo
+            ${promo
               ? `<p class="font-bold text-red-600">${fmtBRL(precoFinal)}</p>
                  <p class="text-xs text-gray-400 line-through">${fmtBRL(p.preco)}</p>`
               : `<p class="font-bold">${fmtBRL(p.preco)}</p>`}
