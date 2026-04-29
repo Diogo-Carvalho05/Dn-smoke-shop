@@ -10,7 +10,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // publicar. Formato: codigo do pais + DDD + numero, so digitos. Ex: 5518999998888
 const LOJA = {
   nome: "Dn Smoke Shop",
-  whatsapp: "5513996305066 ",           // PRINCIPAL (dono) — pedidos vao primeiro pra ele
+  whatsapp: "5513996305066",           // PRINCIPAL (dono) — pedidos vao primeiro pra ele
   whatsapp_secundario: "5518981295957", // SECUNDARIO (admin/funcionario). Se deixar "", o segundo botao some.
   desenvolvedor: {
     nome: "Diogo Carvalho",
