@@ -21,7 +21,7 @@
 <body class="bg-marca-claro text-marca-preto min-h-screen">
   <header class="bg-marca-preto text-marca-branco">
     <div class="max-w-2xl mx-auto px-4 py-4 flex items-center">
-      <a href="/"><img src="/assets/logo.png" alt="Dn Smoke Shop" class="h-10 w-auto object-contain"></a>
+      <a href="/"><img src="/assets/logo.png" alt="Dn Smoke Shop" class="h-10 w-auto object-contain" style="filter:brightness(0) invert(1)"></a>
     </div>
   </header>
 
@@ -166,7 +166,7 @@
         // Mostra tela de sucesso com botoes para os 2 numeros
         const texto = encodeURIComponent(linhas);
         const numeros = [
-          { num: LOJA.whatsapp, label: "1. Avisar Dono" },
+          { num: LOJA.whatsapp, label: "1. Avisar Admin" },
           ...(LOJA.whatsapp_secundario ? [{ num: LOJA.whatsapp_secundario, label: "2. Avisar Admin" }] : []),
         ];
         document.getElementById("botoes-wa").innerHTML = numeros.map(n => `
