@@ -80,34 +80,60 @@
       `).join("") : '<p class="text-gray-500 text-sm">Nenhum item.</p>';
       document.getElementById("total").textContent = fmtBRL(venda.reduce((s, i) => s + i.preco * i.quantidade, 0));
     }
+    function estoqueAtual(produto_id) {
+      const p = produtos.find(x => x.id === produto_id);
+      return p ? Number(p.estoque) : 0;
+    }
     function add(p) {
+      const max = Number(p.estoque);
       const i = venda.findIndex(x => x.produto_id === p.id);
+      const atual = i >= 0 ? venda[i].quantidade : 0;
+      if (atual + 1 > max) { alert(`Estoque insuficiente para "${p.nome}". Maximo: ${max}.`); return; }
       if (i >= 0) venda[i].quantidade++;
       else venda.push({ produto_id: p.id, nome: p.nome, preco: Number(p.preco), quantidade: 1 });
       render();
     }
     function qtd(idx, d) {
-      venda[idx].quantidade += d;
-      if (venda[idx].quantidade <= 0) venda.splice(idx, 1);
+      const item = venda[idx];
+      const nova = item.quantidade + d;
+      if (d > 0) {
+        const max = estoqueAtual(item.produto_id);
+        if (nova > max) { alert(`Estoque insuficiente para "${item.nome}". Maximo: ${max}.`); return; }
+      }
+      item.quantidade = nova;
+      if (item.quantidade <= 0) venda.splice(idx, 1);
       render();
     }
     async function finalizar() {
       if (!venda.length) return;
+      const btnPg = document.querySelector('button.btn-primary[onclick="finalizar()"]');
+      // Revalida estoque com o banco antes de gravar
+      const ids = venda.map(i => i.produto_id);
+      const { data: prods, error: errP } = await sb.from("produtos").select("id,estoque,nome,ativo").in("id", ids);
+      if (errP) { alert(errP.message); return; }
+      for (const i of venda) {
+        const p = prods.find(x => x.id === i.produto_id);
+        if (!p || !p.ativo) { alert(`Produto "${i.nome}" nao esta mais ativo.`); return; }
+        if (p.estoque < i.quantidade) { alert(`Estoque insuficiente para "${p.nome}". Disponivel: ${p.estoque}.`); return; }
+      }
       const total = venda.reduce((s, i) => s + i.preco * i.quantidade, 0);
+      if (btnPg) { btnPg.disabled = true; btnPg.textContent = "Finalizando..."; }
       const { error } = await sb.from("vendas_pdv").insert({
         itens: venda,
         total,
         forma_pagamento: document.getElementById("pg").value,
         admin_id: user.id,
       });
-      if (error) { alert(error.message); return; }
+      if (error) { alert(error.message); if (btnPg) { btnPg.disabled = false; btnPg.textContent = "Finalizar venda"; } return; }
       const { error: rpcErr } = await sb.rpc("baixar_estoque_pdv", { p_itens: venda });
       if (rpcErr) alert("Estoque: " + rpcErr.message);
       venda = [];
       await carregar();
+      if (btnPg) { btnPg.disabled = false; btnPg.textContent = "Finalizar venda"; }
       alert("Venda registrada e estoque atualizado.");
     }
     document.getElementById("busca").addEventListener("input", render);
   </script>
+  <script src="/js/footer.js"></script>
 </body>
 </html>

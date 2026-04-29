@@ -27,11 +27,16 @@ create table if not exists pedidos (
   total numeric(10,2) not null,
   forma_pagamento text not null,
   troco_para numeric(10,2),
-  status text not null default 'pendente',
+  status text not null default 'pendente',  -- pendente | confirmado | saiu_entrega | entregue | cancelado
+  motivo_cancelamento text,
   criado_em timestamptz default now(),
   confirmado_em timestamptz,
+  saiu_entrega_em timestamptz,
   entregue_em timestamptz
 );
+-- Migration safe pra quem ja tem a tabela criada:
+alter table pedidos add column if not exists motivo_cancelamento text;
+alter table pedidos add column if not exists saiu_entrega_em timestamptz;
 create index if not exists idx_pedidos_status on pedidos(status);
 create index if not exists idx_pedidos_criado on pedidos(criado_em desc);
 

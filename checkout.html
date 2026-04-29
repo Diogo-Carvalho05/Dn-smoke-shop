@@ -67,12 +67,25 @@
         <div class="flex justify-between font-bold text-lg">
           <span>Total</span><span id="total"></span>
         </div>
-        <button class="btn-primary w-full mt-4" type="submit">Confirmar pedido</button>
+        <button id="btn-confirmar" class="btn-primary w-full mt-4" type="submit">Confirmar pedido</button>
       </div>
     </form>
+
+    <!-- Tela de sucesso (escondida ate o pedido ser criado) -->
+    <div id="sucesso" class="hidden card p-6 text-center space-y-4">
+      <div class="text-5xl">&#10004;</div>
+      <h3 class="text-xl font-bold">Pedido criado!</h3>
+      <p class="text-sm text-gray-600">
+        Toque nos botoes abaixo pra avisar a loja pelo WhatsApp.<br>
+        <strong>Importante:</strong> envie pelos dois numeros pra garantir que o pedido seja recebido.
+      </p>
+      <div id="botoes-wa" class="flex flex-col gap-2"></div>
+      <a href="/" class="btn-outline block text-center">Voltar pra loja</a>
+    </div>
   </main>
 
   <script src="/js/config.js"></script>
+  <script src="/js/idade.js"></script>
   <script src="/js/carrinho.js"></script>
   <script>
     if (!Carrinho.itens().length) location.href = "/";
@@ -94,48 +107,81 @@
 
     document.getElementById("form").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const f = new FormData(e.target);
-      const itens = Carrinho.itens();
-      const total = Carrinho.total();
-      const pedidoId = crypto.randomUUID();
-      const pedido = {
-        id: pedidoId,
-        cliente_nome: f.get("nome"),
-        cliente_telefone: f.get("telefone"),
-        endereco: {
-          cep: f.get("cep") || null,
-          rua: f.get("rua"),
-          numero: f.get("numero"),
-          complemento: f.get("complemento") || null,
-          bairro: f.get("bairro") || null,
-          cidade: f.get("cidade"),
-        },
-        itens,
-        total,
-        forma_pagamento: f.get("forma_pagamento"),
-        troco_para: f.get("forma_pagamento") === "dinheiro" && f.get("troco_para") ? Number(f.get("troco_para")) : null,
-      };
+      const btn = document.getElementById("btn-confirmar");
+      btn.disabled = true; btn.textContent = "Enviando...";
 
-      const { error } = await sb.from("pedidos").insert(pedido);
-      if (error) { alert("Erro ao enviar pedido: " + error.message); return; }
+      try {
+        const f = new FormData(e.target);
+        const itens = Carrinho.itens();
+        const total = Carrinho.total();
 
-      const linhas = [
-        `*Novo pedido - ${LOJA.nome}*`,
-        `Cliente: ${pedido.cliente_nome}`,
-        `Telefone: ${pedido.cliente_telefone}`,
-        `Endereco: ${pedido.endereco.rua}, ${pedido.endereco.numero}${pedido.endereco.complemento ? " - " + pedido.endereco.complemento : ""} - ${pedido.endereco.bairro || ""} - ${pedido.endereco.cidade}`,
-        ``,
-        `*Itens:*`,
-        ...itens.map(i => `- ${i.quantidade}x ${i.nome} (${fmtBRL(i.preco * i.quantidade)})`),
-        ``,
-        `Total: ${fmtBRL(total)}`,
-        `Pagamento: ${pedido.forma_pagamento}${pedido.troco_para ? " (troco para " + fmtBRL(pedido.troco_para) + ")" : ""}`,
-        ``,
-        `Pedido #${pedidoId.slice(0,8)}`,
-      ].join("\n");
-      Carrinho.limpar();
-      location.href = `https://wa.me/${LOJA.whatsapp}?text=${encodeURIComponent(linhas)}`;
+        // Revalida estoque antes de gravar (anti race-condition)
+        const ids = itens.map(i => i.produto_id);
+        const { data: prods, error: errProd } = await sb.from("produtos").select("id,estoque,nome,ativo").in("id", ids);
+        if (errProd) throw errProd;
+        for (const i of itens) {
+          const p = prods.find(x => x.id === i.produto_id);
+          if (!p || !p.ativo) throw new Error(`Produto "${i.nome}" nao esta mais disponivel.`);
+          if (p.estoque < i.quantidade) throw new Error(`Estoque insuficiente para "${p.nome}". Disponivel: ${p.estoque}.`);
+        }
+
+        const pedidoId = crypto.randomUUID();
+        const pedido = {
+          id: pedidoId,
+          cliente_nome: f.get("nome"),
+          cliente_telefone: f.get("telefone"),
+          endereco: {
+            cep: f.get("cep") || null,
+            rua: f.get("rua"),
+            numero: f.get("numero"),
+            complemento: f.get("complemento") || null,
+            bairro: f.get("bairro") || null,
+            cidade: f.get("cidade"),
+          },
+          itens,
+          total,
+          forma_pagamento: f.get("forma_pagamento"),
+          troco_para: f.get("forma_pagamento") === "dinheiro" && f.get("troco_para") ? Number(f.get("troco_para")) : null,
+        };
+
+        const { error } = await sb.from("pedidos").insert(pedido);
+        if (error) throw error;
+
+        const linhas = [
+          `*Novo pedido - ${LOJA.nome}*`,
+          `Cliente: ${pedido.cliente_nome}`,
+          `Telefone: ${pedido.cliente_telefone}`,
+          `Endereco: ${pedido.endereco.rua}, ${pedido.endereco.numero}${pedido.endereco.complemento ? " - " + pedido.endereco.complemento : ""} - ${pedido.endereco.bairro || ""} - ${pedido.endereco.cidade}`,
+          ``,
+          `*Itens:*`,
+          ...itens.map(i => `- ${i.quantidade}x ${i.nome} (${fmtBRL(i.preco * i.quantidade)})`),
+          ``,
+          `Total: ${fmtBRL(total)}`,
+          `Pagamento: ${pedido.forma_pagamento}${pedido.troco_para ? " (troco para " + fmtBRL(pedido.troco_para) + ")" : ""}`,
+          ``,
+          `Pedido #${pedidoId.slice(0,8)}`,
+        ].join("\n");
+        Carrinho.limpar();
+
+        // Mostra tela de sucesso com botoes para os 2 numeros
+        const texto = encodeURIComponent(linhas);
+        const numeros = [
+          { num: LOJA.whatsapp, label: "1. Avisar Dono" },
+          ...(LOJA.whatsapp_secundario ? [{ num: LOJA.whatsapp_secundario, label: "2. Avisar Admin" }] : []),
+        ];
+        document.getElementById("botoes-wa").innerHTML = numeros.map(n => `
+          <a href="https://wa.me/${n.num}?text=${texto}" target="_blank" rel="noopener"
+             class="btn-primary block text-center">${n.label}</a>
+        `).join("");
+        document.getElementById("form").classList.add("hidden");
+        document.getElementById("sucesso").classList.remove("hidden");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch (err) {
+        alert("Erro ao enviar pedido: " + (err.message || err));
+        btn.disabled = false; btn.textContent = "Confirmar pedido";
+      }
     });
   </script>
+  <script src="/js/footer.js"></script>
 </body>
 </html>

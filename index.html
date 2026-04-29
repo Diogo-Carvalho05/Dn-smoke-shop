@@ -35,6 +35,7 @@
   </main>
 
   <script src="/js/config.js"></script>
+  <script src="/js/idade.js"></script>
   <script src="/js/carrinho.js"></script>
   <script>
     async function carregar() {
@@ -45,7 +46,12 @@
       lista.innerHTML = produtos.map(p => `
         <div class="card p-3 flex flex-col">
           <div class="aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden flex items-center justify-center">
-            ${p.imagem_url ? `<img src="${p.imagem_url}" class="w-full h-full object-cover" alt="${p.nome}">` : '<span class="text-gray-400 text-xs">sem foto</span>'}
+            ${p.imagem_url
+              ? `<img src="${p.imagem_url}" loading="lazy" decoding="async"
+                       class="w-full h-full object-cover bg-gray-200"
+                       alt="${p.nome}"
+                       onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'text-gray-400 text-xs',textContent:'sem foto'}))">`
+              : '<span class="text-gray-400 text-xs">sem foto</span>'}
           </div>
           <h3 class="font-semibold text-sm">${p.nome}</h3>
           <p class="text-xs text-gray-500 flex-1">${p.descricao || ""}</p>
@@ -57,10 +63,11 @@
         </div>
       `).join("");
     }
-    function adicionar(p) { Carrinho.add(p, 1); atualizarBadge(); }
+    function adicionar(p) { if (Carrinho.add(p, 1)) atualizarBadge(); }
     function atualizarBadge() { document.getElementById("badge-carrinho").textContent = Carrinho.qtdTotal(); }
     atualizarBadge();
     carregar();
   </script>
+  <script src="/js/footer.js"></script>
 </body>
 </html>
