@@ -18,7 +18,8 @@
   </style>
   <style>
     /* animacao do ponto voando para o carrinho */
-    #fly-dot { position:fixed; pointer-events:none; z-index:9999; border-radius:50%; background:#fff; width:18px; height:18px; transition: left .55s cubic-bezier(.3,.8,.3,1), top .55s cubic-bezier(.3,.8,.3,1), opacity .55s, transform .55s; }
+    #fly-dot { position:fixed; pointer-events:none; z-index:9999; border-radius:50%; background:#0a0a0a; width:18px; height:18px; transition: left .55s cubic-bezier(.3,.8,.3,1), top .55s cubic-bezier(.3,.8,.3,1), opacity .55s, transform .55s; }
+    html.dark #fly-dot { background:#ffffff; }
     #badge-carrinho { transition: transform .25s; display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
