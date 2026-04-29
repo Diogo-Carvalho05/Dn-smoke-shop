@@ -90,13 +90,13 @@
       const itens = Array.isArray(v.itens) ? v.itens : [];
       return `<div class="border-t py-2 text-sm">
         <div class="flex justify-between items-center gap-2 flex-wrap">
-          <span class="flex-1">${new Date(data).toLocaleString("pt-BR")} - ${ref} - ${v.forma_pagamento}</span>
+          <span class="flex-1">${new Date(data).toLocaleString("pt-BR")} - ${esc(ref)} - ${esc(v.forma_pagamento)}</span>
           <span class="font-bold">${fmtBRL(v.total)}</span>
-          <button class="btn-outline text-xs px-2 py-1" onclick="toggleItens('${id}', this)">+ ver itens</button>
+          <button class="btn-outline text-xs px-2 py-1" onclick="toggleItens('${esc(id)}', this)">+ ver itens</button>
         </div>
-        <ul id="${id}" class="hidden ml-4 mt-2 list-disc list-inside text-xs text-gray-700 bg-gray-50 rounded p-2">
+        <ul id="${esc(id)}" class="hidden ml-4 mt-2 list-disc list-inside text-xs text-gray-700 bg-gray-50 rounded p-2">
           ${itens.length
-            ? itens.map(i => `<li>${i.quantidade}x ${i.nome} - ${fmtBRL(i.preco * i.quantidade)}</li>`).join("")
+            ? itens.map(i => `<li>${Number(i.quantidade)}x ${esc(i.nome)} - ${fmtBRL(i.preco * i.quantidade)}</li>`).join("")
             : "<li>Sem detalhe de itens</li>"}
         </ul>
       </div>`;

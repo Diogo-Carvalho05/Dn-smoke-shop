@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Config - Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: { marca: { preto: "#0a0a0a", branco: "#ffffff", cinza: "#1a1a1a", claro: "#f5f5f5" } } } } };
+  </script>
+  <style type="text/tailwindcss">
+    @layer components {
+      .btn-primary { @apply bg-marca-preto text-marca-branco px-4 py-2 rounded-lg font-medium hover:bg-marca-cinza transition disabled:opacity-50; }
+      .btn-outline { @apply border border-marca-preto text-marca-preto px-4 py-2 rounded-lg font-medium hover:bg-marca-preto hover:text-marca-branco transition; }
+      .input { @apply w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-marca-preto; }
+      .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-marca-claro min-h-screen">
+  <div id="nav"></div>
+  <main class="max-w-4xl mx-auto px-4 py-6 space-y-6">
+    <h2 class="text-2xl font-bold">Configuracoes</h2>
+
+    <!-- Taxa de entrega -->
+    <section class="card p-5 space-y-4">
+      <h3 class="text-lg font-bold border-b pb-2">Taxa de entrega</h3>
+      <label class="flex items-center gap-3 cursor-pointer select-none">
+        <div class="relative">
+          <input type="checkbox" id="taxa-ativa" class="sr-only peer" />
+          <div class="w-11 h-6 bg-gray-300 rounded-full peer-checked:bg-marca-preto transition"></div>
+          <div class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition peer-checked:translate-x-5"></div>
+        </div>
+        <span class="font-medium">Cobrar taxa de entrega</span>
+      </label>
+      <div id="box-taxa-valor" class="hidden">
+        <label class="text-sm text-gray-600 mb-1 block">Valor da taxa (R$)</label>
+        <input class="input max-w-xs" type="number" id="taxa-valor" min="0" step="0.01" placeholder="Ex: 5.00" />
+      </div>
+      <button class="btn-primary" onclick="salvarTaxa()">Salvar taxa</button>
+      <p id="msg-taxa" class="text-sm hidden"></p>
+    </section>
+
+    <!-- Promocoes por produto -->
+    <section class="card p-5 space-y-4">
+      <h3 class="text-lg font-bold border-b pb-2">Promocoes por produto</h3>
+      <p class="text-sm text-gray-500">Defina um preco promocional para produtos especificos. Produtos em promocao aparecem em destaque e primeiro na vitrine.</p>
+      <div id="lista-promo" class="space-y-2"></div>
+    </section>
+  </main>
+
+  <script src="/js/config.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    Auth.requireLogin().then(u => { if (u) init(); });
+    fetch("/admin/_nav.html").then(r => r.text()).then(h => document.getElementById("nav").innerHTML = h);
+
+    async function init() {
+      await Promise.all([carregarConfig(), carregarProdutos()]);
+    }
+
+    async function carregarConfig() {
+      const { data, error } = await sb.from("config_loja").select("*").eq("id", 1).single();
+      if (error) { console.error(error); return; }
+      document.getElementById("taxa-ativa").checked = data.taxa_entrega_ativa;
+      document.getElementById("taxa-valor").value = data.taxa_entrega_valor;
+      document.getElementById("box-taxa-valor").classList.toggle("hidden", !data.taxa_entrega_ativa);
+    }
+
+    document.getElementById("taxa-ativa").addEventListener("change", e => {
+      document.getElementById("box-taxa-valor").classList.toggle("hidden", !e.target.checked);
+    });
+
+    async function salvarTaxa() {
+      const ativa = document.getElementById("taxa-ativa").checked;
+      const valor = Number(document.getElementById("taxa-valor").value) || 0;
+      const msg = document.getElementById("msg-taxa");
+      const { error } = await sb.from("config_loja").update({
+        taxa_entrega_ativa: ativa,
+        taxa_entrega_valor: valor,
+      }).eq("id", 1);
+      msg.classList.remove("hidden", "text-green-700", "text-red-600");
+      if (error) {
+        msg.textContent = "Erro: " + error.message;
+        msg.classList.add("text-red-600");
+      } else {
+        msg.textContent = "Salvo com sucesso!";
+        msg.classList.add("text-green-700");
+        setTimeout(() => msg.classList.add("hidden"), 2500);
+      }
+    }
+
+    async function carregarProdutos() {
+      const { data, error } = await sb.from("produtos").select("id,nome,preco,preco_promocao,isenta_taxa_entrega,ativo").order("nome");
+      if (error) { alert(error.message); return; }
+      document.getElementById("lista-promo").innerHTML = data.map(p => `
+        <div class="border rounded-lg p-3 flex flex-wrap gap-3 items-center" id="row-${esc(p.id)}">
+          <div class="flex-1 min-w-40">
+            <p class="font-medium text-sm">${esc(p.nome)}</p>
+            <p class="text-xs text-gray-500">Preco normal: ${fmtBRL(p.preco)}</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="text-xs text-gray-600 whitespace-nowrap">Preco promo (R$)</label>
+            <input type="number" min="0" step="0.01" placeholder="sem promo"
+                   class="input w-32 text-sm"
+                   id="promo-${esc(p.id)}"
+                   value="${p.preco_promocao !== null ? p.preco_promocao : ''}" />
+          </div>
+          <label class="flex items-center gap-1.5 text-xs cursor-pointer select-none whitespace-nowrap">
+            <input type="checkbox" id="isenta-${esc(p.id)}" ${p.isenta_taxa_entrega ? "checked" : ""} />
+            Isento de taxa
+          </label>
+          <button class="btn-outline text-xs px-3 py-1" onclick="salvarPromo('${esc(p.id)}')">Salvar</button>
+          <p id="msg-${esc(p.id)}" class="text-xs hidden w-full"></p>
+        </div>
+      `).join("");
+    }
+
+    async function salvarPromo(id) {
+      const val = document.getElementById("promo-" + id).value;
+      const isenta = document.getElementById("isenta-" + id).checked;
+      const preco_promocao = val !== "" ? Number(val) : null;
+      const msg = document.getElementById("msg-" + id);
+      const { error } = await sb.from("produtos").update({ preco_promocao, isenta_taxa_entrega: isenta }).eq("id", id);
+      msg.classList.remove("hidden", "text-green-700", "text-red-600");
+      if (error) {
+        msg.textContent = "Erro: " + error.message;
+        msg.classList.add("text-red-600");
+      } else {
+        msg.textContent = "Salvo!";
+        msg.classList.add("text-green-700");
+        setTimeout(() => msg.classList.add("hidden"), 2000);
+      }
+    }
+  </script>
+  <script src="/js/footer.js"></script>
+</body>
+</html>

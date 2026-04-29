@@ -63,8 +63,14 @@
         </div>
       </div>
 
-      <div class="card p-4">
-        <div class="flex justify-between font-bold text-lg">
+      <div class="card p-4 space-y-1">
+        <div class="flex justify-between text-sm text-gray-600">
+          <span>Subtotal</span><span id="subtotal"></span>
+        </div>
+        <div id="row-taxa" class="hidden flex justify-between text-sm text-gray-600">
+          <span>Taxa de entrega</span><span id="valor-taxa"></span>
+        </div>
+        <div class="flex justify-between font-bold text-lg border-t pt-2 mt-1">
           <span>Total</span><span id="total"></span>
         </div>
         <button id="btn-confirmar" class="btn-primary w-full mt-4" type="submit">Confirmar pedido</button>
@@ -89,7 +95,49 @@
   <script src="/js/carrinho.js"></script>
   <script>
     if (!Carrinho.itens().length) location.href = "/";
-    document.getElementById("total").textContent = fmtBRL(Carrinho.total());
+
+    let configLoja = { taxa_entrega_ativa: false, taxa_entrega_valor: 0 };
+    let produtosDB  = [];
+
+    async function iniciarCheckout() {
+      // Carrega config e produtos do banco em paralelo
+      const ids = Carrinho.itens().map(i => i.produto_id);
+      const [cfgRes, prodRes] = await Promise.all([
+        sb.from("config_loja").select("taxa_entrega_ativa,taxa_entrega_valor").eq("id", 1).single(),
+        sb.from("produtos").select("id,isenta_taxa_entrega").in("id", ids),
+      ]);
+      if (cfgRes.data)  configLoja  = cfgRes.data;
+      if (prodRes.data) produtosDB  = prodRes.data;
+      atualizarResumo();
+    }
+
+    function calcularTaxa() {
+      if (!configLoja.taxa_entrega_ativa) return 0;
+      const itens = Carrinho.itens();
+      // Cobra taxa se pelo menos um item nao for isento
+      const algumNaoIsento = itens.some(i => {
+        const prod = produtosDB.find(p => p.id === i.produto_id);
+        return !prod || !prod.isenta_taxa_entrega;
+      });
+      return algumNaoIsento ? Number(configLoja.taxa_entrega_valor) : 0;
+    }
+
+    function atualizarResumo() {
+      const subtotal = Carrinho.total();
+      const taxa     = calcularTaxa();
+      const total    = subtotal + taxa;
+      document.getElementById("subtotal").textContent   = fmtBRL(subtotal);
+      document.getElementById("total").textContent      = fmtBRL(total);
+      const rowTaxa = document.getElementById("row-taxa");
+      if (taxa > 0) {
+        document.getElementById("valor-taxa").textContent = fmtBRL(taxa);
+        rowTaxa.classList.remove("hidden");
+      } else {
+        rowTaxa.classList.add("hidden");
+      }
+    }
+
+    iniciarCheckout();
 
     document.getElementById("pg").addEventListener("change", e => {
       document.getElementById("box-troco").classList.toggle("hidden", e.target.value !== "dinheiro");
@@ -112,21 +160,26 @@
 
       try {
         const f = new FormData(e.target);
-        const itens = Carrinho.itens();
-        const total = Carrinho.total();
+        const itensLocal = Carrinho.itens();
 
-        // Revalida estoque antes de gravar (anti race-condition)
-        const ids = itens.map(i => i.produto_id);
-        const { data: prods, error: errProd } = await sb.from("produtos").select("id,estoque,nome,ativo").in("id", ids);
+        // Busca preco/nome do banco ANTES da RPC (anon nao pode SELECT pedidos depois)
+        const ids = itensLocal.map(i => i.produto_id);
+        const { data: prods, error: errProd } = await sb.from("produtos")
+          .select("id,nome,preco,preco_promocao,estoque,ativo,isenta_taxa_entrega").in("id", ids);
         if (errProd) throw errProd;
-        for (const i of itens) {
-          const p = prods.find(x => x.id === i.produto_id);
-          if (!p || !p.ativo) throw new Error(`Produto "${i.nome}" nao esta mais disponivel.`);
-          if (p.estoque < i.quantidade) throw new Error(`Estoque insuficiente para "${p.nome}". Disponivel: ${p.estoque}.`);
-        }
 
+        // Calcula taxa no momento do envio (usa o mesmo calculo do resumo)
+        const taxaEntrega = calcularTaxa();
+
+        // Monta payload enviando apenas produto_id + quantidade.
+        // A RPC criar_pedido() valida estoque, busca preco/nome do banco e insere
+        // o pedido + reserva estoque numa unica transacao atomica.
         const pedidoId = crypto.randomUUID();
-        const pedido = {
+        const itensQtd = itensLocal.map(i => ({
+          produto_id: i.produto_id,
+          quantidade: Math.max(1, Math.floor(Number(i.quantidade) || 0)),
+        }));
+        const payload = {
           id: pedidoId,
           cliente_nome: f.get("nome"),
           cliente_telefone: f.get("telefone"),
@@ -138,14 +191,26 @@
             bairro: f.get("bairro") || null,
             cidade: f.get("cidade"),
           },
-          itens,
-          total,
+          itens: itensQtd,
+          taxa_entrega: taxaEntrega > 0 ? String(taxaEntrega) : null,
           forma_pagamento: f.get("forma_pagamento"),
-          troco_para: f.get("forma_pagamento") === "dinheiro" && f.get("troco_para") ? Number(f.get("troco_para")) : null,
+          troco_para: f.get("forma_pagamento") === "dinheiro" && f.get("troco_para")
+            ? String(f.get("troco_para"))
+            : null,
         };
 
-        const { error } = await sb.from("pedidos").insert(pedido);
+        const { error } = await sb.rpc("criar_pedido", { payload });
         if (error) throw error;
+
+        // Reconstroi itens com preco/nome do banco para exibir na mensagem WhatsApp
+        const itens = itensQtd.map(i => {
+          const p = prods.find(x => x.id === i.produto_id);
+          const temPromo = p?.preco_promocao !== null && p?.preco_promocao < p?.preco;
+          return { ...i, nome: p?.nome || i.produto_id, preco: Number(temPromo ? p.preco_promocao : p?.preco || 0) };
+        });
+        const subtotal = itens.reduce((s, i) => s + i.preco * i.quantidade, 0);
+        const total    = subtotal + taxaEntrega;
+        const pedido   = payload;
 
         const linhas = [
           `*Novo pedido - ${LOJA.nome}*`,
@@ -156,6 +221,7 @@
           `*Itens:*`,
           ...itens.map(i => `- ${i.quantidade}x ${i.nome} (${fmtBRL(i.preco * i.quantidade)})`),
           ``,
+          ...(taxaEntrega > 0 ? [`Subtotal: ${fmtBRL(subtotal)}`, `Taxa de entrega: ${fmtBRL(taxaEntrega)}`] : []),
           `Total: ${fmtBRL(total)}`,
           `Pagamento: ${pedido.forma_pagamento}${pedido.troco_para ? " (troco para " + fmtBRL(pedido.troco_para) + ")" : ""}`,
           ``,

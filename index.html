@@ -54,28 +54,47 @@
       if (error) { alert("Erro: " + error.message); return; }
       const lista = document.getElementById("lista");
       if (!produtos.length) { document.getElementById("vazio").classList.remove("hidden"); return; }
-      lista.innerHTML = produtos.map(p => `
-        <div class="card p-3 flex flex-col">
+
+      // Promovidos primeiro, depois restante por nome
+      const ordenados = [
+        ...produtos.filter(p => p.preco_promocao !== null && p.preco_promocao < p.preco),
+        ...produtos.filter(p => !(p.preco_promocao !== null && p.preco_promocao < p.preco)),
+      ];
+
+      lista.innerHTML = ordenados.map(p => {
+        const temPromo = p.preco_promocao !== null && p.preco_promocao < p.preco;
+        const precoFinal = temPromo ? p.preco_promocao : p.preco;
+        return `
+        <div class="card p-3 flex flex-col relative ${temPromo ? "ring-2 ring-red-500" : ""}">
+          ${temPromo ? `<span class="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full z-10">PROMO</span>` : ""}
           <div class="aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden flex items-center justify-center">
             ${p.imagem_url
-              ? `<img src="${p.imagem_url}" loading="lazy" decoding="async"
+              ? `<img src="${esc(p.imagem_url)}" loading="lazy" decoding="async"
                        class="w-full h-full object-cover bg-gray-200"
-                       alt="${p.nome}"
+                       alt="${esc(p.nome)}"
                        onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'text-gray-400 text-xs',textContent:'sem foto'}))">`
               : '<span class="text-gray-400 text-xs">sem foto</span>'}
           </div>
-          <h3 class="font-semibold text-sm">${p.nome}</h3>
-          <p class="text-xs text-gray-500 flex-1">${p.descricao || ""}</p>
-          <p class="font-bold mt-2">${fmtBRL(p.preco)}</p>
-          <p class="text-xs text-gray-500 mb-2">Estoque: ${p.estoque}</p>
-          <button class="btn-primary text-sm" onclick='adicionar(${JSON.stringify(p)}, this)' ${p.estoque <= 0 ? "disabled" : ""}>
+          <h3 class="font-semibold text-sm">${esc(p.nome)}</h3>
+          <p class="text-xs text-gray-500 flex-1">${esc(p.descricao || "")}</p>
+          <div class="mt-2">
+            ${temPromo
+              ? `<p class="font-bold text-red-600">${fmtBRL(precoFinal)}</p>
+                 <p class="text-xs text-gray-400 line-through">${fmtBRL(p.preco)}</p>`
+              : `<p class="font-bold">${fmtBRL(p.preco)}</p>`}
+          </div>
+          <p class="text-xs text-gray-500 mb-2">Estoque: ${Number(p.estoque)}</p>
+          <button class="btn-primary text-sm" onclick='adicionar(${escAttr(p)}, this)' ${p.estoque <= 0 ? "disabled" : ""}>
             ${p.estoque <= 0 ? "Sem estoque" : "Adicionar"}
           </button>
         </div>
-      `).join("");
+      `}).join("");
     }
     function adicionar(p, btn) {
-      if (!Carrinho.add(p, 1)) return;
+      // Usa preco promocional se disponivel
+      const temPromo = p.preco_promocao !== null && p.preco_promocao < p.preco;
+      const prodCarrinho = { ...p, preco: temPromo ? p.preco_promocao : p.preco };
+      if (!Carrinho.add(prodCarrinho, 1)) return;
       atualizarBadge();
       flyToCart(btn);
     }

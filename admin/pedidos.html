@@ -45,36 +45,45 @@
       if (s) q = q.eq("status", s);
       const { data, error } = await q;
       if (error) { alert(error.message); return; }
-      document.getElementById("lista").innerHTML = data.map(p => `
+      document.getElementById("lista").innerHTML = data.map(p => {
+        const end = p.endereco || {};
+        const enderecoTxt = [
+          `${esc(end.rua)}, ${esc(end.numero)}${end.complemento ? " - " + esc(end.complemento) : ""}`,
+          end.bairro ? " - " + esc(end.bairro) : "",
+          ` - ${esc(end.cidade)}`,
+          end.cep ? " - CEP " + esc(end.cep) : "",
+        ].join("");
+        return `
         <div class="card p-4">
           <div class="flex justify-between flex-wrap gap-2">
             <div>
-              <p class="font-bold">${p.cliente_nome} <span class="text-gray-500 text-sm">(${p.cliente_telefone})</span></p>
-              <p class="text-xs text-gray-500">${new Date(p.criado_em).toLocaleString("pt-BR")} - #${p.id.slice(0,8)}</p>
+              <p class="font-bold">${esc(p.cliente_nome)} <span class="text-gray-500 text-sm">(${esc(p.cliente_telefone)})</span></p>
+              <p class="text-xs text-gray-500">${new Date(p.criado_em).toLocaleString("pt-BR")} - #${esc(p.id.slice(0,8))}</p>
             </div>
-            <span class="px-2 py-1 rounded text-xs font-bold ${badge(p.status)}">${labelStatus(p.status)}</span>
+            <span class="px-2 py-1 rounded text-xs font-bold ${badge(p.status)}">${esc(labelStatus(p.status))}</span>
           </div>
-          <p class="text-sm mt-2">
-            ${p.endereco.rua}, ${p.endereco.numero}${p.endereco.complemento ? " - " + p.endereco.complemento : ""}
-            ${p.endereco.bairro ? " - " + p.endereco.bairro : ""} - ${p.endereco.cidade}
-            ${p.endereco.cep ? " - CEP " + p.endereco.cep : ""}
-          </p>
+          <p class="text-sm mt-2">${enderecoTxt}</p>
           <ul class="text-sm mt-2 list-disc list-inside">
-            ${p.itens.map(i => `<li>${i.quantidade}x ${i.nome} - ${fmtBRL(i.preco * i.quantidade)}</li>`).join("")}
+            ${(p.itens || []).map(i => `<li>${Number(i.quantidade)}x ${esc(i.nome)} - ${fmtBRL(i.preco * i.quantidade)}</li>`).join("")}
           </ul>
-          <p class="mt-2 font-bold">Total: ${fmtBRL(p.total)} - ${p.forma_pagamento}${p.troco_para ? " (troco p/ " + fmtBRL(p.troco_para) + ")" : ""}</p>
+          <p class="mt-2 font-bold">
+            ${p.taxa_entrega > 0
+              ? `Subtotal: ${fmtBRL(p.subtotal)} + Taxa: ${fmtBRL(p.taxa_entrega)} = `
+              : ""}Total: ${fmtBRL(p.total)} - ${esc(p.forma_pagamento)}${p.troco_para ? " (troco p/ " + fmtBRL(p.troco_para) + ")" : ""}
+          </p>
           ${p.status === "cancelado" && p.motivo_cancelamento
-              ? `<p class="mt-2 text-sm text-red-700"><strong>Motivo do cancelamento:</strong> ${p.motivo_cancelamento}</p>`
+              ? `<p class="mt-2 text-sm text-red-700"><strong>Motivo do cancelamento:</strong> ${esc(p.motivo_cancelamento)}</p>`
               : ""}
           <div class="flex gap-2 mt-3 flex-wrap">
-            ${p.status === "pendente"     ? `<button class="btn-primary" onclick='mudar(${JSON.stringify(p)}, "confirmado")'>Confirmar</button>` : ""}
-            ${p.status === "confirmado"   ? `<button class="btn-primary" onclick='mudar(${JSON.stringify(p)}, "saiu_entrega")'>Saiu p/ entrega</button>` : ""}
-            ${p.status === "saiu_entrega" ? `<button class="btn-primary" onclick='mudar(${JSON.stringify(p)}, "entregue")'>Marcar entregue (baixa estoque)</button>` : ""}
+            ${p.status === "pendente"     ? `<button class="btn-primary" onclick='mudar(${escAttr(p)}, "confirmado")'>Confirmar</button>` : ""}
+            ${p.status === "confirmado"   ? `<button class="btn-primary" onclick='mudar(${escAttr(p)}, "saiu_entrega")'>Saiu p/ entrega</button>` : ""}
+            ${p.status === "saiu_entrega" ? `<button class="btn-primary" onclick='mudar(${escAttr(p)}, "entregue")'>Marcar entregue (baixa estoque)</button>` : ""}
             ${["pendente","confirmado","saiu_entrega"].includes(p.status)
-              ? `<button class="btn-outline" onclick='cancelar(${JSON.stringify(p)})'>Cancelar</button>` : ""}
+              ? `<button class="btn-outline" onclick='cancelar(${escAttr(p)})'>Cancelar</button>` : ""}
           </div>
         </div>
-      `).join("") || '<p class="text-gray-500 text-center py-8">Nenhum pedido.</p>';
+      `;
+      }).join("") || '<p class="text-gray-500 text-center py-8">Nenhum pedido.</p>';
     }
     function badge(s) {
       return ({
@@ -119,11 +128,7 @@
       if (status === "entregue")     update.entregue_em     = new Date().toISOString();
       const { error } = await sb.from("pedidos").update(update).eq("id", pedido.id);
       if (error) { alert(error.message); return; }
-      if (status === "entregue") {
-        const { error: rpcErr } = await sb.rpc("baixar_estoque_pedido", { p_pedido_id: pedido.id });
-        if (rpcErr) alert("Estoque: " + rpcErr.message);
-      }
-      // Abre WhatsApp do cliente com mensagem ja pronta
+      // Estoque ja foi reservado em criar_pedido() no checkout. Nao subtrai de novo.
       abrirWhatsAppCliente(pedido.cliente_telefone, mensagemCliente(pedido, status));
       filtrar(filtroAtual);
     }
@@ -131,6 +136,9 @@
     async function cancelar(pedido) {
       const motivo = prompt("Justificativa do cancelamento (sera enviada ao cliente):");
       if (!motivo || !motivo.trim()) { alert("Motivo obrigatorio."); return; }
+      // Devolve estoque ao cancelar
+      const { error: rpcErr } = await sb.rpc("devolver_estoque_pedido", { p_pedido_id: pedido.id });
+      if (rpcErr) { alert("Erro ao devolver estoque: " + rpcErr.message); return; }
       const { error } = await sb.from("pedidos").update({
         status: "cancelado",
         motivo_cancelamento: motivo.trim(),

@@ -83,16 +83,16 @@
         <tr class="border-t">
           <td class="p-2">
             <div class="w-12 h-12 bg-gray-100 rounded overflow-hidden">
-              ${p.imagem_url ? `<img src="${p.imagem_url}" loading="lazy" decoding="async" class="w-full h-full object-cover">` : ""}
+              ${p.imagem_url ? `<img src="${esc(p.imagem_url)}" loading="lazy" decoding="async" class="w-full h-full object-cover">` : ""}
             </div>
           </td>
-          <td class="p-2">${p.nome}</td>
+          <td class="p-2">${esc(p.nome)}</td>
           <td class="p-2 text-right">${fmtBRL(p.preco)}</td>
-          <td class="p-2 text-right">${p.estoque}</td>
+          <td class="p-2 text-right">${Number(p.estoque)}</td>
           <td class="p-2 text-center">${p.ativo ? "&#10003;" : "&#10007;"}</td>
           <td class="p-2 text-right whitespace-nowrap">
-            <button class="text-blue-600 underline" onclick='editar(${JSON.stringify(p)})'>editar</button>
-            <button class="text-red-600 underline ml-2" onclick='excluir(${JSON.stringify({ id: p.id, nome: p.nome, imagem_url: p.imagem_url })})'>excluir</button>
+            <button class="text-blue-600 underline" onclick='editar(${escAttr(p)})'>editar</button>
+            <button class="text-red-600 underline ml-2" onclick='excluir(${escAttr({ id: p.id, nome: p.nome, imagem_url: p.imagem_url })})'>excluir</button>
           </td>
         </tr>
       `).join("");

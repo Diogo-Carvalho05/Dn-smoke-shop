@@ -56,13 +56,13 @@
       wrap.innerHTML = itens.map(i => `
         <div class="card p-3 flex items-center gap-3">
           <div class="flex-1">
-            <p class="font-semibold">${i.nome}</p>
+            <p class="font-semibold">${esc(i.nome)}</p>
             <p class="text-sm text-gray-500">${fmtBRL(i.preco)} cada</p>
           </div>
           <div class="flex items-center gap-2">
-            <button class="btn-outline px-3 py-1" onclick="setQtd('${i.produto_id}', ${i.quantidade - 1})">-</button>
-            <span class="font-bold w-6 text-center">${i.quantidade}</span>
-            <button class="btn-outline px-3 py-1" onclick="setQtd('${i.produto_id}', ${i.quantidade + 1})">+</button>
+            <button class="btn-outline px-3 py-1" onclick="setQtd('${esc(i.produto_id)}', ${Number(i.quantidade) - 1})">-</button>
+            <span class="font-bold w-6 text-center">${Number(i.quantidade)}</span>
+            <button class="btn-outline px-3 py-1" onclick="setQtd('${esc(i.produto_id)}', ${Number(i.quantidade) + 1})">+</button>
           </div>
           <p class="font-bold w-24 text-right">${fmtBRL(i.preco * i.quantidade)}</p>
         </div>
