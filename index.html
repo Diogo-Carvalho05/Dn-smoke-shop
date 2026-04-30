@@ -55,8 +55,8 @@
     <!-- Abas de marcas -->
     <div id="abas-marca" class="flex gap-2 mb-4 flex-wrap overflow-x-auto pb-2"></div>
 
-    <!-- Lista de produtos -->
-    <div id="lista" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+    <!-- Lista de produtos (grid quando filtrado; blocos por marca quando "Todas") -->
+    <div id="lista"></div>
     <p id="vazio" class="hidden text-center text-gray-500 py-12">Nenhum produto disponivel.</p>
   </main>
 
@@ -66,6 +66,7 @@
   <script>
     let taxaAtiva = false;
     let todosProdutos = [];
+    let todasMarcas = [];
     let marcaSelecionada = null;
     let termoBusca = "";
 
@@ -79,94 +80,145 @@
       if (prodRes.error) { alert("Erro ao carregar produtos: " + prodRes.error.message); return; }
       taxaAtiva = cfgRes.data?.taxa_entrega_ativa ?? false;
       todosProdutos = prodRes.data || [];
-      const marcas = marcaRes.error ? [] : (marcaRes.data || []);
+      todasMarcas = marcaRes.error ? [] : (marcaRes.data || []);
 
       // Injeta nome da marca em cada produto para exibir no card
-      const marcaMap = Object.fromEntries(marcas.map(m => [m.id, m.nome]));
+      const marcaMap = Object.fromEntries(todasMarcas.map(m => [m.id, m.nome]));
       todosProdutos = todosProdutos.map(p => ({
         ...p,
         marcas: p.marca_id ? { id: p.marca_id, nome: marcaMap[p.marca_id] || "" } : null,
       }));
 
-      // Monta abas de marca (todas + marca 1 + marca 2 + ...)
-      const abasMarcas = [{ id: null, nome: "Todas" }, ...marcas];
-      document.getElementById("abas-marca").innerHTML = abasMarcas.map(m => `
-        <button
-          class="px-4 py-2 rounded-lg border transition whitespace-nowrap ${
-            marcaSelecionada === m.id ? "bg-marca-preto text-marca-branco border-marca-preto" : "border-gray-300 hover:border-marca-preto"
-          }"
-          onclick="filtrarPorMarca('${m.id || 'null'}')"
-        >${esc(m.nome)}</button>
-      `).join("");
+      renderAbas();
 
       if (!todosProdutos.length) { document.getElementById("vazio").classList.remove("hidden"); return; }
 
       render();
     }
 
+    const GRID = "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4";
+
+    function cardProduto(p, mostrarMarca = false) {
+      const promo       = p.preco_promocao !== null && p.preco_promocao < p.preco;
+      const freteGratis = taxaAtiva && p.isenta_taxa_entrega;
+      const precoFinal  = promo ? p.preco_promocao : p.preco;
+      const ringCor     = promo ? "ring-red-500" : freteGratis ? "ring-green-500" : "";
+      return `
+      <div class="card p-3 flex flex-col relative ${ringCor ? "ring-2 " + ringCor : ""}">
+        <div class="absolute top-2 left-2 flex flex-col gap-1 z-10">
+          ${promo       ? `<span class="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">PROMO</span>` : ""}
+          ${freteGratis ? `<span class="bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">FRETE GRATIS</span>` : ""}
+        </div>
+        <div class="aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden flex items-center justify-center">
+          ${p.imagem_url
+            ? `<img src="${esc(p.imagem_url)}" loading="lazy" decoding="async"
+                     class="w-full h-full object-cover bg-gray-200"
+                     alt="${esc(p.nome)}"
+                     onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'text-gray-400 text-xs',textContent:'sem foto'}))">`
+            : '<span class="text-gray-400 text-xs">sem foto</span>'}
+        </div>
+        <h3 class="font-semibold text-sm">${esc(p.nome)}</h3>
+        ${mostrarMarca && p.marcas ? `<p class="text-xs text-gray-500">${esc(p.marcas.nome)}</p>` : ""}
+        <p class="text-xs text-gray-500 flex-1">${esc(p.descricao || "")}</p>
+        <div class="mt-2">
+          ${promo
+            ? `<p class="font-bold text-red-600">${fmtBRL(precoFinal)}</p>
+               <p class="text-xs text-gray-400 line-through">${fmtBRL(p.preco)}</p>`
+            : `<p class="font-bold">${fmtBRL(p.preco)}</p>`}
+        </div>
+        <p class="text-xs text-gray-500 mb-2">Estoque: ${Number(p.estoque)}</p>
+        <button class="btn-primary text-sm" onclick='adicionar(${escAttr(p)}, this)' ${p.estoque <= 0 ? "disabled" : ""}>
+          ${p.estoque <= 0 ? "Sem estoque" : "Adicionar"}
+        </button>
+      </div>`;
+    }
+
+    function ordenarProdutos(lista) {
+      const temDestaque = p =>
+        (p.preco_promocao !== null && p.preco_promocao < p.preco) ||
+        (taxaAtiva && p.isenta_taxa_entrega);
+      return [
+        ...lista.filter(p => temDestaque(p)),
+        ...lista.filter(p => !temDestaque(p)),
+      ];
+    }
+
     function render() {
-      // Filtra por marca e busca
+      const busca = termoBusca.toLowerCase();
+
+      // Filtra por busca e marca
       let filtrados = todosProdutos.filter(p => {
         const encaixaMarca = marcaSelecionada === null || p.marca_id === marcaSelecionada;
-        const encaixaBusca = termoBusca === "" ||
-          esc(p.nome).toLowerCase().includes(termoBusca.toLowerCase()) ||
-          (p.marcas && esc(p.marcas.nome).toLowerCase().includes(termoBusca.toLowerCase()));
+        const encaixaBusca = busca === "" ||
+          p.nome.toLowerCase().includes(busca) ||
+          (p.marcas?.nome || "").toLowerCase().includes(busca);
         return encaixaMarca && encaixaBusca;
       });
 
+      const lista = document.getElementById("lista");
+
       if (!filtrados.length) {
         document.getElementById("vazio").classList.remove("hidden");
-        document.getElementById("lista").innerHTML = "";
+        lista.innerHTML = "";
         return;
       }
       document.getElementById("vazio").classList.add("hidden");
 
-      const temPromo    = p => p.preco_promocao !== null && p.preco_promocao < p.preco;
-      const temDestaque = p => temPromo(p) || (taxaAtiva && p.isenta_taxa_entrega);
+      // Modo blocos: sem filtro de marca E sem busca ativa
+      if (marcaSelecionada === null && busca === "") {
+        // Agrupa por marca (preserva a ordem das abas)
+        const grupos = new Map(); // marca_id => { nome, produtos }
+        for (const p of filtrados) {
+          const chave = p.marca_id || "__sem_marca__";
+          if (!grupos.has(chave)) {
+            grupos.set(chave, {
+              nome: p.marcas?.nome || "Outros",
+              produtos: [],
+            });
+          }
+          grupos.get(chave).produtos.push(p);
+        }
+        // Marcas com nome primeiro, "Outros" por ultimo
+        const entries = [...grupos.entries()].sort(([ka], [kb]) => {
+          if (ka === "__sem_marca__") return 1;
+          if (kb === "__sem_marca__") return -1;
+          return grupos.get(ka).nome.localeCompare(grupos.get(kb).nome);
+        });
 
-      // Ordem: 1º destaque (promo + frete gratis), 2º restante — ambos por nome
-      const ordenados = [
-        ...filtrados.filter(p => temDestaque(p)),
-        ...filtrados.filter(p => !temDestaque(p)),
-      ];
+        lista.innerHTML = entries.map(([, g]) => `
+          <section class="mb-8">
+            <h2 class="text-xl font-bold mb-3 pb-2 border-b border-gray-200">${esc(g.nome)}</h2>
+            <div class="${GRID}">
+              ${ordenarProdutos(g.produtos).map(p => cardProduto(p, false)).join("")}
+            </div>
+          </section>
+        `).join("");
 
-      document.getElementById("lista").innerHTML = ordenados.map(p => {
-        const promo       = temPromo(p);
-        const freteGratis = taxaAtiva && p.isenta_taxa_entrega;
-        const precoFinal  = promo ? p.preco_promocao : p.preco;
-        const ringCor     = promo ? "ring-red-500" : freteGratis ? "ring-green-500" : "";
-        return `
-        <div class="card p-3 flex flex-col relative ${ringCor ? "ring-2 " + ringCor : ""}">
-          <div class="absolute top-2 left-2 flex flex-col gap-1 z-10">
-            ${promo       ? `<span class="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">PROMO</span>` : ""}
-            ${freteGratis ? `<span class="bg-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">FRETE GRATIS</span>` : ""}
-          </div>
-          <div class="aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden flex items-center justify-center">
-            ${p.imagem_url
-              ? `<img src="${esc(p.imagem_url)}" loading="lazy" decoding="async"
-                       class="w-full h-full object-cover bg-gray-200"
-                       alt="${esc(p.nome)}"
-                       onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'text-gray-400 text-xs',textContent:'sem foto'}))">`
-              : '<span class="text-gray-400 text-xs">sem foto</span>'}
-          </div>
-          <h3 class="font-semibold text-sm">${esc(p.nome)}</h3>
-          ${p.marcas ? `<p class="text-xs text-gray-500">${esc(p.marcas.nome)}</p>` : ""}
-          <p class="text-xs text-gray-500 flex-1">${esc(p.descricao || "")}</p>
-          <div class="mt-2">
-            ${promo
-              ? `<p class="font-bold text-red-600">${fmtBRL(precoFinal)}</p>
-                 <p class="text-xs text-gray-400 line-through">${fmtBRL(p.preco)}</p>`
-              : `<p class="font-bold">${fmtBRL(p.preco)}</p>`}
-          </div>
-          <p class="text-xs text-gray-500 mb-2">Estoque: ${Number(p.estoque)}</p>
-          <button class="btn-primary text-sm" onclick='adicionar(${escAttr(p)}, this)' ${p.estoque <= 0 ? "disabled" : ""}>
-            ${p.estoque <= 0 ? "Sem estoque" : "Adicionar"}
-          </button>
-        </div>
-      `}).join("");
+      } else {
+        // Modo flat: marca filtrada ou busca ativa — grade simples, mostra nome da marca
+        lista.innerHTML = `
+          <div class="${GRID}">
+            ${ordenarProdutos(filtrados).map(p => cardProduto(p, true)).join("")}
+          </div>`;
+      }
     }
+    function renderAbas() {
+      const abasMarcas = [{ id: null, nome: "Todas" }, ...todasMarcas];
+      document.getElementById("abas-marca").innerHTML = abasMarcas.map(m => `
+        <button
+          class="px-4 py-2 rounded-lg border transition whitespace-nowrap ${
+            marcaSelecionada === m.id
+              ? "bg-marca-preto text-marca-branco border-marca-preto"
+              : "border-gray-300 hover:border-marca-preto"
+          }"
+          onclick="filtrarPorMarca('${m.id || 'null'}')"
+        >${esc(m.nome)}</button>
+      `).join("");
+    }
+
     function filtrarPorMarca(marcaId) {
       marcaSelecionada = marcaId === 'null' ? null : marcaId;
+      renderAbas();
       render();
     }
 
