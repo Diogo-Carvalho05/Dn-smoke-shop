@@ -41,6 +41,21 @@
 
   <main class="max-w-6xl mx-auto px-4 py-6">
     <h2 class="text-2xl font-semibold mb-4">Produtos</h2>
+
+    <!-- Busca -->
+    <div class="mb-4">
+      <input
+        type="text"
+        id="busca"
+        placeholder="Buscar por nome ou marca..."
+        class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-marca-preto"
+      />
+    </div>
+
+    <!-- Abas de marcas -->
+    <div id="abas-marca" class="flex gap-2 mb-4 flex-wrap overflow-x-auto pb-2"></div>
+
+    <!-- Lista de produtos -->
     <div id="lista" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
     <p id="vazio" class="hidden text-center text-gray-500 py-12">Nenhum produto disponivel.</p>
   </main>
@@ -50,29 +65,65 @@
   <script src="/js/carrinho.js"></script>
   <script>
     let taxaAtiva = false;
+    let todosProdutos = [];
+    let marcaSelecionada = null;
+    let termoBusca = "";
 
     async function carregar() {
-      const [prodRes, cfgRes] = await Promise.all([
-        sb.from("produtos").select("*").eq("ativo", true).order("nome"),
+      const [prodRes, marcaRes, cfgRes] = await Promise.all([
+        sb.from("produtos").select("*,marcas(id,nome)").eq("ativo", true).order("nome"),
+        sb.from("marcas").select("*").eq("ativo", true).order("nome"),
         sb.from("config_loja").select("taxa_entrega_ativa").eq("id", 1).single(),
       ]);
       if (prodRes.error) { alert("Erro: " + prodRes.error.message); return; }
       taxaAtiva = cfgRes.data?.taxa_entrega_ativa ?? false;
+      todosProdutos = prodRes.data || [];
+      const marcas = marcaRes.data || [];
 
-      const produtos = prodRes.data;
+      // Monta abas de marca (todas + marca 1 + marca 2 + ...)
+      const abasMarcas = [{ id: null, nome: "Todas" }, ...marcas];
+      document.getElementById("abas-marca").innerHTML = abasMarcas.map(m => `
+        <button
+          class="px-4 py-2 rounded-lg border transition whitespace-nowrap ${
+            marcaSelecionada === m.id ? "bg-marca-preto text-marca-branco border-marca-preto" : "border-gray-300 hover:border-marca-preto"
+          }"
+          onclick="filtrarPorMarca('${m.id || 'null'}')"
+        >${esc(m.nome)}</button>
+      `).join("");
+
       const lista = document.getElementById("lista");
-      if (!produtos.length) { document.getElementById("vazio").classList.remove("hidden"); return; }
+      if (!todosProdutos.length) { document.getElementById("vazio").classList.remove("hidden"); return; }
+
+      render();
+    }
+
+    function render() {
+      // Filtra por marca e busca
+      let filtrados = todosProdutos.filter(p => {
+        const encaixaMarca = marcaSelecionada === null || p.marca_id === marcaSelecionada;
+        const encaixaBusca = termoBusca === "" ||
+          esc(p.nome).toLowerCase().includes(termoBusca.toLowerCase()) ||
+          (p.marcas && esc(p.marcas.nome).toLowerCase().includes(termoBusca.toLowerCase()));
+        return encaixaMarca && encaixaBusca;
+      });
+
+      if (!filtrados.length) {
+        document.getElementById("vazio").classList.remove("hidden");
+        document.getElementById("lista").innerHTML = "";
+        return;
+      }
+      document.getElementById("vazio").classList.add("hidden");
 
       const temPromo    = p => p.preco_promocao !== null && p.preco_promocao < p.preco;
       const temDestaque = p => temPromo(p) || (taxaAtiva && p.isenta_taxa_entrega);
 
       // Ordem: 1º destaque (promo + frete gratis), 2º restante — ambos por nome
       const ordenados = [
-        ...produtos.filter(p => temDestaque(p)),
-        ...produtos.filter(p => !temDestaque(p)),
+        ...filtrados.filter(p => temDestaque(p)),
+        ...filtrados.filter(p => !temDestaque(p)),
       ];
 
-      lista.innerHTML = ordenados.map(p => {
+      document.getElementById("lista").innerHTML = ordenados.map(p => {
         const promo       = temPromo(p);
         const freteGratis = taxaAtiva && p.isenta_taxa_entrega;
         const precoFinal  = promo ? p.preco_promocao : p.preco;
@@ -92,6 +143,7 @@
               : '<span class="text-gray-400 text-xs">sem foto</span>'}
           </div>
           <h3 class="font-semibold text-sm">${esc(p.nome)}</h3>
+          ${p.marcas ? `<p class="text-xs text-gray-500">${esc(p.marcas.nome)}</p>` : ""}
           <p class="text-xs text-gray-500 flex-1">${esc(p.descricao || "")}</p>
           <div class="mt-2">
             ${promo
@@ -106,6 +158,16 @@
         </div>
       `}).join("");
     }
+    function filtrarPorMarca(marcaId) {
+      marcaSelecionada = marcaId === 'null' ? null : marcaId;
+      render();
+    }
+
+    document.getElementById("busca").addEventListener("input", e => {
+      termoBusca = e.target.value;
+      render();
+    });
+
     function adicionar(p, btn) {
       // Usa preco promocional se disponivel
       const temPromo = p.preco_promocao !== null && p.preco_promocao < p.preco;

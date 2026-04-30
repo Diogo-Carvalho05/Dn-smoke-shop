@@ -6,6 +6,14 @@
 create extension if not exists "pgcrypto";
 
 -- ---------- TABELAS ----------
+create table if not exists marcas (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null unique,
+  ativo boolean not null default true,
+  criado_em timestamptz default now()
+);
+create index if not exists idx_marcas_ativo on marcas(ativo);
+
 create table if not exists produtos (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
@@ -13,6 +21,7 @@ create table if not exists produtos (
   preco numeric(10,2) not null check (preco >= 0),
   estoque integer not null default 0 check (estoque >= 0),
   imagem_url text,
+  marca_id uuid references marcas(id),
   ativo boolean not null default true,
   preco_promocao numeric(10,2) default null check (preco_promocao is null or preco_promocao >= 0),
   isenta_taxa_entrega boolean not null default false,
@@ -21,6 +30,7 @@ create table if not exists produtos (
 -- Migrations safe para quem ja tem a tabela criada:
 alter table produtos add column if not exists preco_promocao numeric(10,2) default null;
 alter table produtos add column if not exists isenta_taxa_entrega boolean not null default false;
+alter table produtos add column if not exists marca_id uuid references marcas(id);
 create index if not exists idx_produtos_ativo on produtos(ativo);
 create index if not exists idx_produtos_promocao on produtos(preco_promocao) where preco_promocao is not null;
 
@@ -69,10 +79,24 @@ create table if not exists vendas_pdv (
 create index if not exists idx_vendas_pdv_criado on vendas_pdv(criado_em desc);
 
 -- ---------- RLS ----------
+alter table marcas enable row level security;
 alter table produtos enable row level security;
 alter table pedidos enable row level security;
 alter table vendas_pdv enable row level security;
 alter table config_loja enable row level security;
+
+-- MARCAS: anon ve so ativas; authenticated ve tudo e edita
+drop policy if exists marcas_select_anon on marcas;
+drop policy if exists marcas_select_auth on marcas;
+drop policy if exists marcas_insert_auth on marcas;
+drop policy if exists marcas_update_auth on marcas;
+drop policy if exists marcas_delete_auth on marcas;
+
+create policy marcas_select_anon on marcas for select to anon using (ativo = true);
+create policy marcas_select_auth on marcas for select to authenticated using (true);
+create policy marcas_insert_auth on marcas for insert to authenticated with check (true);
+create policy marcas_update_auth on marcas for update to authenticated using (true);
+create policy marcas_delete_auth on marcas for delete to authenticated using (true);
 
 -- PRODUTOS: anon ve so ativos; authenticated ve tudo e edita
 drop policy if exists produtos_select_anon on produtos;
@@ -109,6 +133,8 @@ create policy config_loja_update_auth on config_loja for update to authenticated
 
 -- ---------- GRANTS (necessario alem das policies de RLS) ----------
 grant usage on schema public to anon, authenticated;
+grant select on marcas to anon, authenticated;
+grant insert, update, delete on marcas to authenticated;
 grant select on produtos to anon, authenticated;
 grant insert, update, delete on produtos to authenticated;
 grant insert on pedidos to anon, authenticated;

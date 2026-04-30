@@ -52,6 +52,10 @@
         <input class="input" name="preco" type="number" step="0.01" placeholder="Preco" required />
         <input class="input" name="estoque" type="number" placeholder="Estoque" required />
       </div>
+      <select class="input" name="marca_id">
+        <option value="">Sem marca</option>
+        <option id="marca-opt-loading">Carregando marcas...</option>
+      </select>
       <input class="input" name="imagem" type="file" accept="image/*" onchange="preview(event)" />
       <input type="hidden" name="imagem_url" />
       <div id="preview-wrap" class="hidden">
@@ -71,22 +75,40 @@
   <script src="/js/config.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+    let marcas = [];
+
     Auth.requireLogin().then(u => { if (u) init(); });
     fetch("/admin/_nav.html").then(r => r.text()).then(h => document.getElementById("nav").innerHTML = h);
 
-    async function init() { carregar(); }
+    async function init() {
+      await carregarMarcas();
+      carregar();
+    }
+
+    async function carregarMarcas() {
+      const { data, error } = await sb.from("marcas").select("*").eq("ativo", true).order("nome");
+      if (!error) marcas = data || [];
+      const sel = document.querySelector('[name=marca_id]');
+      sel.innerHTML = `<option value="">Sem marca</option>` +
+        marcas.map(m => `<option value="${esc(m.id)}">${esc(m.nome)}</option>`).join("");
+    }
 
     async function carregar() {
       const { data, error } = await sb.from("produtos").select("*").order("nome");
       if (error) { alert(error.message); return; }
-      document.getElementById("tbody").innerHTML = data.map(p => `
+      document.getElementById("tbody").innerHTML = data.map(p => {
+        const nomeMarca = p.marca_id ? marcas.find(m => m.id === p.marca_id)?.nome : "-";
+        return `
         <tr class="border-t">
           <td class="p-2">
             <div class="w-12 h-12 bg-gray-100 rounded overflow-hidden">
               ${p.imagem_url ? `<img src="${esc(p.imagem_url)}" loading="lazy" decoding="async" class="w-full h-full object-cover">` : ""}
             </div>
           </td>
-          <td class="p-2">${esc(p.nome)}</td>
+          <td class="p-2">
+            <p class="font-medium">${esc(p.nome)}</p>
+            <p class="text-xs text-gray-500">${nomeMarca}</p>
+          </td>
           <td class="p-2 text-right">${fmtBRL(p.preco)}</td>
           <td class="p-2 text-right">${Number(p.estoque)}</td>
           <td class="p-2 text-center">${p.ativo ? "&#10003;" : "&#10007;"}</td>
@@ -95,7 +117,9 @@
             <button class="text-red-600 underline ml-2" onclick='excluir(${escAttr({ id: p.id, nome: p.nome, imagem_url: p.imagem_url })})'>excluir</button>
           </td>
         </tr>
-      `).join("");
+      `;
+      }).join("");
+    }
     }
 
     function abrirModal() {
@@ -113,6 +137,7 @@
       document.querySelector('[name=descricao]').value = p.descricao || "";
       document.querySelector('[name=preco]').value = p.preco;
       document.querySelector('[name=estoque]').value = p.estoque;
+      document.querySelector('[name=marca_id]').value = p.marca_id || "";
       document.querySelector('[name=imagem_url]').value = p.imagem_url || "";
       document.querySelector('[name=ativo]').checked = !!p.ativo;
       const wrap = document.getElementById("preview-wrap");
@@ -189,6 +214,7 @@
           descricao: f.get("descricao") || null,
           preco: Number(f.get("preco")),
           estoque: Number(f.get("estoque")),
+          marca_id: f.get("marca_id") || null,
           ativo: f.get("ativo") === "on",
           imagem_url,
         };
