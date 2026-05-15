@@ -25,15 +25,43 @@
       .card { @apply bg-marca-branco border border-gray-200 rounded-xl shadow-sm; }
     }
   </style>
+  <style>
+    /* Fix iOS Safari: input type=date com estilo nativo "vaza" do container.
+       Forca aparencia neutra, altura controlada, e impede overflow. */
+    input[type="date"].input-date {
+      -webkit-appearance: none;
+      appearance: none;
+      min-width: 0;
+      width: 100%;
+      min-height: 38px;
+      max-width: 100%;
+      box-sizing: border-box;
+      font-size: 12px;
+      line-height: 1.2;
+      background-color: #fff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    input[type="date"].input-date::-webkit-date-and-time-value {
+      text-align: left;
+      font-size: 12px;
+    }
+    /* iPhone pequeno: corta o ano para nao vazar */
+    @media (max-width: 380px) {
+      input[type="date"].input-date,
+      input[type="date"].input-date::-webkit-date-and-time-value { font-size: 11px; }
+    }
+  </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-marca-claro min-h-screen">
   <div id="nav"></div>
   <main class="max-w-6xl mx-auto px-4 py-6">
     <h2 class="text-2xl font-bold mb-4">Relatorios de venda</h2>
-    <div class="card p-3 sm:p-4 mb-4 grid grid-cols-2 lg:grid-cols-4 gap-2 overflow-hidden">
-      <input class="input text-sm px-2 py-1.5" type="date" id="de" />
-      <input class="input text-sm px-2 py-1.5" type="date" id="ate" />
+    <div class="card p-3 sm:p-4 mb-4 grid grid-cols-2 lg:grid-cols-4 gap-2">
+      <input class="input input-date px-2 py-1.5" type="date" id="de" />
+      <input class="input input-date px-2 py-1.5" type="date" id="ate" />
       <select class="input text-sm px-2 py-1.5 col-span-2 lg:col-span-1" id="origem">
         <option value="todos">Online + PDV</option>
         <option value="online">Somente Online</option>
