@@ -31,15 +31,15 @@
   <div id="nav"></div>
   <main class="max-w-6xl mx-auto px-4 py-6">
     <h2 class="text-2xl font-bold mb-4">Relatorios de venda</h2>
-    <div class="card p-4 mb-4 space-y-2 sm:space-y-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
-      <input class="input" type="date" id="de" />
-      <input class="input" type="date" id="ate" />
-      <select class="input" id="origem">
+    <div class="card p-3 sm:p-4 mb-4 space-y-2 sm:space-y-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-2 overflow-hidden">
+      <input class="input text-xs sm:text-base" type="date" id="de" />
+      <input class="input text-xs sm:text-base" type="date" id="ate" />
+      <select class="input text-xs sm:text-base" id="origem">
         <option value="todos">Online + PDV</option>
         <option value="online">Somente Online</option>
         <option value="pdv">Somente PDV</option>
       </select>
-      <button class="btn-primary w-full" onclick="gerar()">Gerar</button>
+      <button class="btn-primary w-full text-xs sm:text-base" onclick="gerar()">Gerar</button>
     </div>
     <div id="resumo" class="grid md:grid-cols-3 gap-3 mb-4"></div>
     <div id="detalhe" class="space-y-4"></div>
