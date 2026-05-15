@@ -81,8 +81,9 @@
 
     async function carregar() {
       // Busca produtos sem join (compativel mesmo antes de rodar o SQL de marcas)
+      // gt("estoque", 0) garante que produtos sem estoque sumam automaticamente da vitrine
       const [prodRes, marcaRes, cfgRes] = await Promise.all([
-        sb.from("produtos").select("*").eq("ativo", true).order("nome"),
+        sb.from("produtos").select("*").eq("ativo", true).gt("estoque", 0).order("nome"),
         sb.from("marcas").select("*").eq("ativo", true).order("nome"),
         sb.from("config_loja").select("taxa_entrega_ativa").eq("id", 1).single(),
       ]);
