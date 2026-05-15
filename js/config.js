@@ -11,7 +11,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const LOJA = {
   nome: "Dn Smoke Shop",
   whatsapp: "5513996305066",           // PRINCIPAL (dono) — pedidos vao primeiro pra ele
-  whatsapp_secundario: "5518981295957", // SECUNDARIO (admin/funcionario). Se deixar "", o segundo botao some.
+  whatsapp_secundario: "5518997817136", // SECUNDARIO (admin/funcionario). Se deixar "", o segundo botao some.
   desenvolvedor: {
     nome: "Diogo Carvalho",
     instagram: "https://www.instagram.com/diogocarvalho_16/",
